@@ -1,0 +1,15 @@
+compute_resources:
+  neural_units: 
+    - type: GPU
+      count: 2
+      model: A100
+    - type: CPU
+      count: 16
+      architecture: x86-64
+sensor_array:
+  - modality: vision
+    resolution: 4K@60Hz
+  - modality: tactile
+    channels: 32
+  - modality: auditory
+    sample_rate: 48kHz
