@@ -9,7 +9,7 @@ class Hippocampus:
         self.hippo_mem = HippocampalMemory()
     
     def retrieve_shared_context(self, task = None):
-        print("retrieved")
+        print("share context retrieved")
         return "simulated retrieval"
 
 class HippocampalMemory:

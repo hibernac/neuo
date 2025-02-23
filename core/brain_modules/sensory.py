@@ -1,5 +1,7 @@
 import torch
+import sys
 from transformers import AutoProcessor, AutoModel
+sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
 from config.neuro_config import SENSORY_CONFIG
 
 class MultimodalProcessor:

@@ -2,13 +2,18 @@ import numpy as np
 import openai
 import json
 import requests
-from config.api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
+import sys
+sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
+from api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
 from scipy.signal import welch
 
 def workers_info_list2str(workers):
     return "\n".join(
-    "{}. {}: {}".format(i + 1, worker, expertise) for i, (worker, expertise) in enumerate(workers)
-)
+        "{}. {}: {}".format(i + 1, worker, dict2str(expertise) if isinstance(expertise, dict) else expertise) for i, (worker, expertise) in enumerate(workers)
+    )
+
+def dict2str(a):
+    return str(a)
 
 def list2str(a):
     return str(a)
@@ -34,10 +39,10 @@ def get_clean_json(llm_response):
     try:
         content = llm_response["choices"][0]["message"]["content"]
         if content.startswith('```json\n'):
-            return content[7:-3]
-        return content
-    except (KeyError, IndexError):
-        return "Error: Unable to parse response."
+            content = content[7:-3]
+        return json.loads(content)
+    except (KeyError, IndexError, json.JSONDecodeError):
+        return {"error": "Unable to parse response."}
 
 def query_llm(prompt, model="gpt-4o"):
     """大语言模型调用"""
@@ -60,7 +65,7 @@ def query_llm(prompt, model="gpt-4o"):
     return response.json()
 
 def filter_subtasks_by_workers(json_data, allowed_pool):
-    """从LLM输出中解析选中的worker以及对应的focus"""
+    """从LLM输出中解析子任务"""
     try:    
         data = json.loads(json_data) if isinstance(json_data, str) else json_data
         filtered_subtasks = [

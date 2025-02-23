@@ -1,16 +1,21 @@
 import asyncio
 import time
+import sys
+from tqdm import tqdm
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Dict
 from abc import ABC, abstractmethod
-from core.brain_modules.hippocampus import Hippocampus
 # from agents.thalamus import thalamus
 # from memory.working_memory import WorkingMemory
-from utils.legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt
-from utils.neuro_utils import workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
-from config.neuro_config import STRUCTURE, AGENTS, INITIAL_EXPERTISE_MAP
-from config.prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT
+sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/utils')
+sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
+sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
+from hippocampus import Hippocampus
+from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt
+from neuro_utils import workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
+from neuro_config import STRUCTURE, AGENTS
+from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT
 
 class BaseAgent(ABC):
     """智能体基类，定义通用消息处理机制"""
@@ -49,8 +54,7 @@ class LeaderAgent(BaseAgent):
         1. 任务初始化与状态检查
         2. 获取任务相关上下文
         3. 智能分配子任务与人员
-        4. 任务分发与执行
-        5. 结果收集与状态重置
+        4. 任务分发
         """
         if not await self._check_availability():
             return
@@ -58,8 +62,16 @@ class LeaderAgent(BaseAgent):
         await self._prepare_task_context()
         await self._allocate_subtasks()
         await self._broadcast_tasks()
-        await self._monitor_execution()
+  
+    def process_feedback(self, timeout: float = 30.0):
+        """处理员工反馈（带超时机制）"""
+        if self.current_task['pending_workers']:
+            print("Workers have not completed their tasks")
+            return
+        print(f"Task: {self.current_task['description']}")
+        print(f" └─>Response: {self.inbox}")
         self._reset_task_state()
+        # TODO: implement a more comprehensive prefrontal mechanism
         
     async def _check_availability(self) -> bool:
         """检查leader当前是否可以接收新任务"""
@@ -77,7 +89,7 @@ class LeaderAgent(BaseAgent):
             "id": task_id,
             "description": task_description,
             "shared_context": [],
-            "selected": [],
+            "subtasks": [],
             "pending_workers": [],
             "iteration": 0
         }
@@ -92,18 +104,19 @@ class LeaderAgent(BaseAgent):
         """分配子任务给合适的工作者"""
         prompt = self._construct_decision_prompt()
         while True:
-            llm_response = await query_llm(prompt)
+            llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_lead_fmt(resp_json):
+                # print(resp_json)
                 break
                 
-        self.current_task['selected'] = await filter_subtasks_by_workers(
-            llm_response, self.worker_pool
+        self.current_task['subtasks'] = filter_subtasks_by_workers(
+            resp_json, self.worker_pool
         )
         
     async def _broadcast_tasks(self):
         """向选定的工作者广播任务"""
-        for subtask in self.current_task['selected']:
+        for subtask in self.current_task['subtasks']:
             await self.send_message(subtask['assigned_worker'], {
                 "type": "task_assign",
                 "task_id": self.current_task['id'],
@@ -112,20 +125,12 @@ class LeaderAgent(BaseAgent):
                 "subtask": subtask['task_description'],
                 "context": self.current_task['shared_context'],
                 "focus": subtask['focus'],
-                "collaborators": [(_subtask_['assigned_worker'], _subtask_['focus']) 
-                                  for _subtask_ in self.current_task['selected'] 
+                "collaborators": [(_subtask_['assigned_worker'], STRUCTURE['prefrontal']['expertise'][_subtask_['assigned_worker']]) 
+                                  for _subtask_ in self.current_task['subtasks'] 
                                   if _subtask_['assigned_worker'] != subtask['assigned_worker']]
             })
             self.current_task['pending_workers'].append(subtask['assigned_worker'])
         self.idle = False
-        
-    async def _monitor_execution(self):
-        """监控任务执行进度"""
-        while self.current_task['pending_workers']:
-            await asyncio.sleep(10)
-            
-        print("All workers submitted their reports:")
-        print(self.inbox)
         
     def _reset_task_state(self):
         """重置任务状态"""
@@ -142,9 +147,9 @@ class LeaderAgent(BaseAgent):
     
     async def receive_message(self, sender_id, content):
         """接收消息"""
-        if any(tup[0] == sender_id for tup in self.current_task['selected']):
-            focus = next(tup[1] for tup in self.current_task['selected'] 
-                              if tup[0] == sender_id)
+        if any(_subtask_['assigned_worker'] == sender_id for _subtask_ in self.current_task['subtasks']):
+            focus = next(_subtask_['focus'] for _subtask_ in self.current_task['subtasks'] 
+                              if _subtask_['assigned_worker'])
             self.inbox.append({
                 "timestamp": time.time(),
                 "sender_id": sender_id,
@@ -152,38 +157,12 @@ class LeaderAgent(BaseAgent):
                 "content": content,
             })
             self.current_task['pending_workers'].remove(sender_id)
-            
-    def process_feedback(self, timeout: float = 30.0):
-        """处理员工反馈（带超时机制）"""
-        print(self.inbox)
-        return
-        # TODO: implement a more comprehensive prefrontal mechanism
-        start_time = time.time()
-        while len(self.inbox) < len(self.current_task["selected"]):
-            # 处理收到的消息
-            for msg in self.inbox:
-                if msg["content"]["type"] == "task_feedback":
-                    self.inbox[msg["sender"]] = msg["content"]["data"]
-            self.inbox = [m for m in self.inbox if m["content"]["type"] != "task_feedback"]
-            
-            # 超时检查
-            if time.time() - start_time > timeout:
-                break
-            time.sleep(0.5)
-        
-        # 生成综合决策
-        consensus = self._generate_consensus()
-        
-        if consensus["status"] == "confirmed":
-            thalamus.route_decision(consensus["plan"])
-        else:
-            self._initiate_iteration(consensus["conflicts"])
-    
+          
     def _generate_consensus(self) -> dict: 
         """综合员工反馈生成决策共识"""
         # 从海马体获取历史决策模式
         decision_patterns = Hippocampus.query_decision_patterns(
-            self.current_task["description"]
+            self.current_task['description']
         )
         
         # 构建LLM提示词进行综合判断
@@ -200,10 +179,12 @@ class LeaderAgent(BaseAgent):
     
     def _construct_decision_prompt(self):
         """构建决策提示词,整合当前状态、历史记忆和任务目标"""
-        str_worker_info = workers_info_list2str(self.worker_pool)
-        return LEADER_PROMPT.format(str_worker_info, self.current_task['description'])
+        worker_exp_pairs = ((worker_id, STRUCTURE['prefrontal']['expertise'][worker_id]) for worker_id in self.worker_pool)
+        return LEADER_PROMPT.format(
+            str_worker_info=workers_info_list2str(worker_exp_pairs), 
+            str_mission=self.current_task['description']
+        )
         
-
 class WorkerAgent(BaseAgent):
     """员工智能体实现协作任务处理"""
     class Status:
@@ -220,11 +201,11 @@ class WorkerAgent(BaseAgent):
     def _initialize_task(self, context: dict):
         """初始化新任务的基础结构"""
         self.current_task = {
-            "focus": context['focus'],                  # 指示重点
             "task_id": context['task_id'],              # 任务ID
             "subtask_id": context['subtask_id'],        # 子任务ID
             "task": context['task'],                    # 任务简介
             "subtask": context['subtask'],              # 子任务简介
+            "focus": context['focus'],                  # 指示重点
             "collaborators": context['collaborators'],  # 当前协作的智能体列表
             "request_list": [],                         # 需求列表
             "work_list": [],                            # 工作列表
@@ -234,26 +215,27 @@ class WorkerAgent(BaseAgent):
             "shared_context": context['context']
         }
 
-    async def refl(self, context: dict):
+    async def refl(self):
         """思考分配的任务并寻助"""
-        self._initialize_task(context)
+        if self.current_task is None:
+            print("Error: No task currently assigned")
+            return
         await self._reflect_task()
         
     async def coll(self):
         """执行协作任务"""
         self.status = self.Status.PENDING
-        while self.current_task["work_list"]:
-            for task in self.current_task["work_list"][:]:
-                if task["type"] == "collab_request":
-                    await self._collab_task(task)
-                    self.current_task["work_list"].remove(task)
+        while self.current_task['work_list']:
+            for task in self.current_task['work_list'][:]:
+                await self._collab_task(task)
+                self.current_task['work_list'].remove(task)
         self.status = self.Status.IDLE
         
-    async def work(self, context: dict):
+    async def work(self):
         """执行主任务"""
-        if self.status == self.Status.IDLE and not self.current_task["request_list"] and not self.current_task["work_list"]:
+        if self.status == self.Status.IDLE and not self.current_task['request_list'] and not self.current_task['work_list']:
             self.status = self.Status.BUSY
-            await self._work_task(context)
+            await self._work_task()
             self.status = self.Status.IDLE
     
     async def send_message(self, recipient_id: str, content: dict):
@@ -265,7 +247,7 @@ class WorkerAgent(BaseAgent):
     
     async def receive_message(self, sender_id: str, content: dict):
         """接收信息"""
-        if sender_id == self.leader_id and content["type"] == "task_assign" and self.current_task == None and self.status == self.Status.IDLE:
+        if sender_id == self.leader_id and content['type'] == "task_assign" and self.current_task == None and self.status == self.Status.IDLE:
             self._initialize_task(content)
         elif any(tup[0] == sender_id for tup in self.current_task['collaborators']):
             if content['type'] == "collab_request":
@@ -289,30 +271,32 @@ class WorkerAgent(BaseAgent):
         """使用LLM发起与其他员工的协作流程"""
         prompt = self._construct_decision_prompt("reflection")
         while True:
-            llm_response = await query_llm(prompt)
+            llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_work_refl_fmt(resp_json):
+                # print(resp_json)
                 break
 
-        if not resp_json["collaboration_required"]:
+        if not resp_json['collaboration_required']:
             return
             
-        for req in resp_json["requirement"]:
-            self.current_task["request_list"].append(req["request_id"])
-            await self.send_message(req["worker_id"], {
+        for req in resp_json['requirement']:
+            self.current_task['request_list'].append(req['request_id'])
+            await self.send_message(req['worker_id'], {
                 "type": "collab_request",
-                "request_id": req["request_id"],
+                "request_id": req['request_id'],
                 "requester_id": self.agent_id,
-                "request_detail": req["request_detail"]
+                "request_detail": req['request_detail']
             })    
     
     async def _collab_task(self, context: dict):
         """使用LLM进行子任务执行"""
         prompt = self._construct_decision_prompt("collaboration", context)
         while True:
-            llm_response = await query_llm(prompt)
+            llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_work_coll_fmt(resp_json):
+                # print(resp_json)
                 break
         
         await self.send_message(context['requester_id'], {
@@ -322,13 +306,14 @@ class WorkerAgent(BaseAgent):
                 "response": resp_json['response']
             })    
     
-    async def _work_task(self, context: dict):
+    async def _work_task(self):
         """使用LLM进行主任务执行"""
         prompt = self._construct_decision_prompt("task")
         while True:
-            llm_response = await query_llm(prompt)
+            llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_work_task_fmt(resp_json):
+                # print(resp_json)
                 break
         
         await self.send_message(self.leader_id, {
@@ -348,25 +333,25 @@ class WorkerAgent(BaseAgent):
         """构建决策提示词"""
         if prompt_type == "reflection":
             return WORKER_REFL_PROMPT.format(
-                self.expertise,
-                self.current_task['subtask_id'],
-                self.current_task['subtask'],
-                self.current_task["focus"],
-                self.current_task["collaborators"]
+                str_worker_exp=self.expertise,
+                str_subtask_id=self.current_task['subtask_id'],
+                str_task_desc=self.current_task['subtask'],
+                str_focus=self.current_task['focus'], 
+                str_co_worker_info=self.current_task['collaborators']
             )
         elif prompt_type == "collaboration":
             return WORKER_COLL_PROMPT.format(
-                self.expertise,
-                context['request_id'],
-                context['requester_id'],
-                context['request_detail']
+                str_worker_exp=self.expertise,
+                str_reqs_id=context['request_id'],
+                str_reqtr_id=context['requester_id'],
+                str_reqs_inst=context['request_detail']
             )
         elif prompt_type == "task":
             return WORKER_TASK_PROMPT.format(
-                self.expertise,
-                self.current_task['subtask'],
-                self.current_task['focus'],
-                knowledge_info_list2str(self.inbox)
+                str_worker_exp=self.expertise,
+                str_task_desc=self.current_task['subtask'],
+                str_focus=self.current_task['focus'],
+                str_recv_know=knowledge_info_list2str(self.inbox)
             )
         else:
             raise ValueError(f"Unknown prompt type: {prompt_type}")
@@ -390,12 +375,12 @@ class PrefrontalOrchestrator:
         global AGENTS
         AGENTS = {}
         
-        self.leader = LeaderAgent("leader_01", STRUCTURE["prefrontal"]["worker_ids"])
+        self.leader = LeaderAgent("leader_01", STRUCTURE['prefrontal']['worker_ids'])
         self.workers = {
-            wid: WorkerAgent(wid, "leader_01", INITIAL_EXPERTISE_MAP[wid])
-            for wid in STRUCTURE["prefrontal"]["worker_ids"]
+            wid: WorkerAgent(wid, "leader_01", STRUCTURE['prefrontal']['expertise'][wid])
+            for wid in STRUCTURE['prefrontal']['worker_ids']
         }
-        AGENTS["leader_01"] = self.leader
+        AGENTS['leader_01'] = self.leader
         AGENTS.update(self.workers)
         
         self.current_task_status = TaskStatus.PENDING
@@ -406,11 +391,11 @@ class PrefrontalOrchestrator:
         try:
             self.current_task_status = TaskStatus.RUNNING
             self.metrics.execution_time = time.time()
-            await self._execute_leader_phase(task_description)
+            await self._execute_assign_phase(task_description)
             await self._execute_reflection_phase()
             await self._execute_collaboration_phase()
             await self._execute_work_phase()
-            await self._process_results()
+            self._process_results()
             self.current_task_status = TaskStatus.COMPLETED
             self.metrics.execution_time = time.time() - self.metrics.execution_time
             return self.metrics
@@ -420,53 +405,45 @@ class PrefrontalOrchestrator:
             self.metrics.error_count += 1
             raise
     
-    
-    async def _execute_leader_phase(self, task_description: str):
-        await self.leader.assign_task(task_description)
-        await asyncio.sleep(5)
+    async def _execute_assign_phase(self, task_description: str):
+        with tqdm(total=1, desc="Assign phase") as pbar:
+            await self.leader.assign_task(task_description)
+            pbar.update(1)
 
     async def _execute_reflection_phase(self):
         reflection_tasks = [
-            worker.refl(self.leader.current_task["shared_context"])
+            worker.refl() 
             for worker in self.workers.values()
+            if worker.current_task is not None
         ]
-        await asyncio.gather(*reflection_tasks)
+        with tqdm(total=len(reflection_tasks), desc="Reflection phase") as pbar:
+            for task in asyncio.as_completed(reflection_tasks):
+                await task
+                pbar.update(1)
 
     async def _execute_collaboration_phase(self):
         collab_tasks = [
             worker.coll()
             for worker in self.workers.values()
+            if worker.current_task is not None
         ]
-        await asyncio.gather(*collab_tasks)
+        with tqdm(total=len(collab_tasks), desc="Collaboration phase") as pbar:
+            for task in asyncio.as_completed(collab_tasks):
+                await task
+                pbar.update(1)
 
     async def _execute_work_phase(self):
         work_tasks = [
-            worker.work(self.leader.current_task["shared_context"])
+            worker.work()
             for worker in self.workers.values()
+            if worker.current_task is not None
         ]
-        await asyncio.gather(*work_tasks)
-
-    async def _process_results(self):
-        await self.leader.process_feedback()
-        self._calculate_metrics()
-
-    def _calculate_metrics(self):
-        total_messages = len(self.leader.inbox)
-        successful_messages = len([msg for msg in self.leader.inbox 
-                                 if msg["content"]["type"] == "task_response"])
-        
-        self.metrics.task_completion = successful_messages / total_messages
-        self.metrics.collaboration_quality = len([msg for msg in self.leader.inbox 
-                                                if "collaboration" in msg["content"]]) / total_messages
-
-
-async def test_prefrontal():
-    orchestrator = PrefrontalOrchestrator()
-    task = "Design a new authentication system"
+        with tqdm(total=len(work_tasks), desc="Work phase") as pbar:
+            for task in asyncio.as_completed(work_tasks):
+                await task
+                pbar.update(1)
     
-    metrics = await orchestrator.execute_decision_cycle(task)
-    print(f"Task Metrics: {metrics}")
-    
-if __name__ == "__main__":
-    asyncio.run(test_prefrontal())
-
+    def _process_results(self):
+        with tqdm(total=1, desc="Results processing") as pbar:
+            self.leader.process_feedback()
+            pbar.update(1)        

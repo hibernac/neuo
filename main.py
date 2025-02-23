@@ -1,5 +1,7 @@
 # -*- main.py -*-
-from core.brain_modules import MultimodalProcessor, HierarchicalController
+import asyncio
+from core.brain_modules.sensory import MultimodalProcessor
+from core.brain_modules.prefrontal import PrefrontalOrchestrator
 from agents.coordinator import CorticalCoordinator
 from memory.knowledge_graph import NeuroSemanticMemory
 
@@ -8,7 +10,7 @@ class EmbodiedAgentSystem:
     def __init__(self):
         self.sensory = MultimodalProcessor()
         self.memory = NeuroSemanticMemory()
-        self.controller = HierarchicalController()
+        self.controller = PrefrontalOrchestrator()
         self.coordinator = CorticalCoordinator()
         
         # 初始化智能体集群
@@ -39,4 +41,18 @@ class EmbodiedAgentSystem:
         
         # 运动执行
         return self._execute_actions(allocations)
+
+async def test_prefrontal():
+    orchestrator = PrefrontalOrchestrator()
+    task = '''
+    A team of autonomous robots collaborates in a dynamic hospital environment to manage medication delivery, restock supplies, and respond to emergencies (e.g., spills). 
+    Using a multi-agent prefrontal reflection framework, they negotiate task priorities (e.g., rerouting deliveries around obstacles), resolve conflicts (e.g., shared corridor access), and adapt strategies in real-time (e.g., redistributing tasks during communication failures). 
+    Each robot continuously self-assesses decisions (e.g., "Was prioritizing ICU over Pediatrics optimal?") and shares insights to optimize collective efficiency, safety, and adaptability in unpredictable, human-centric settings.
+    '''
+    
+    metrics = await orchestrator.execute_decision_cycle(task)
+    print(f"Task Metrics: {metrics}")
+    
+if __name__ == "__main__":
+    asyncio.run(test_prefrontal())
 

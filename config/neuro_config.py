@@ -1,11 +1,32 @@
-AGENTS = {}
-
+# system config
 STRUCTURE = {
     "prefrontal": {
         "leader_number": 1,
         "leader_ids": [ "Leader_0" ],
         "worker_number": 5,
-        "worker_ids": [ "Worker_1", "Worker_2", "Worker_3", "Worker_4", "Worker_5" ]
+        "worker_ids": [ "Worker_1", "Worker_2", "Worker_3", "Worker_4", "Worker_5" ],
+        "expertise": {
+            "Worker_1": {
+                "title": "Environmental Perception Specialist",
+                "detail": "Real-time sensor data interpretation (e.g., LiDAR, cameras, tactile sensors), object recognition, spatial mapping, and anomaly detection in dynamic environments."
+            },
+            "Worker_2": {
+                "title": "Dynamic Path Planner",
+                "detail": "Multi-objective trajectory optimization, collision avoidance, energy-efficient routing, and real-time adaptation to environmental/operational changes."
+            },
+            "Worker_3": {
+                "title": "Operational Control Expert",
+                "detail": "Precise actuator coordination, force/torque optimization, error correction in physical interactions, and safety protocol enforcement."
+            },
+            "Worker_4": {
+                "title": "Human-Robot Interface Coordinator",
+                "detail": "Natural language command parsing, user intent recognition, contextual feedback generation, and emotion/gesture interpretation for collaborative tasks."
+            },
+            "Worker_5": {
+                "title": "System Integrity Orchestrator",
+                "detail": "Resource allocation monitoring, cross-module dependency management, failure recovery protocols, and energy/performance tradeoff optimization."
+            }
+        }
     },
     "hippocampus": {
         "skb": {
@@ -23,16 +44,6 @@ STRUCTURE = {
     }
 }
 
-INITIAL_EXPERTISE_MAP = {
-    "Worker_1": "reasoning",
-    "Worker_2": "reasoning",
-    "Worker_3": "reasoning",
-    "Worker_4": "reasoning",
-    "Worker_5": "reasoning"
-}
-
-AGENTS = []
-
 NEURO_MODULES = {
     "sensory": {
         "processor": "google/vit-base-patch16-224",
@@ -49,3 +60,8 @@ COORDINATION_PARAMS = {
     "timeout": 5.0,
     "max_retries": 3
 }
+
+# global parameters
+AGENTS = {}
+
+SENSORY_CONFIG = {}
