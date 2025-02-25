@@ -117,3 +117,39 @@ def check_work_coll_fmt(response_json):
             
     except Exception:
         return False
+    
+def check_insp_review_fmt(response_json):
+    try:
+        if isinstance(response_json, str):
+            response_json = json.loads(response_json)
+                
+        if "passed" not in response_json or not isinstance(response_json["passed"], bool):
+            return False
+                
+        if "issues" not in response_json or not isinstance(response_json["issues"], list):
+            return False
+                
+        valid_types = ["contradiction", "missing_info", "scope_violation"]
+        valid_severities = ["critical", "warning"]
+                
+        for issue in response_json["issues"]:
+            if not isinstance(issue, dict):
+                return False
+                    
+            required_fields = ["issue_id", "type", "description", "severity"]
+            if not all(field in issue for field in required_fields):
+                return False
+                    
+            if not isinstance(issue["issue_id"], str):
+                return False
+            if not isinstance(issue["type"], str) or issue["type"] not in valid_types:
+                return False
+            if not isinstance(issue["description"], str):
+                return False
+            if not isinstance(issue["severity"], str) or issue["severity"] not in valid_severities:
+                return False
+                    
+        return True
+            
+    except Exception:
+        return False

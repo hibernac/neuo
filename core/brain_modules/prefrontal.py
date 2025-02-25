@@ -1,21 +1,14 @@
-import asyncio
 import time
 import sys
-from tqdm import tqdm
-from dataclasses import dataclass
-from enum import Enum
 from typing import List, Dict
 from abc import ABC, abstractmethod
-# from agents.thalamus import thalamus
-# from memory.working_memory import WorkingMemory
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/utils')
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
 from hippocampus import Hippocampus
-from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt
+from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt
 from neuro_utils import workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
 from neuro_config import STRUCTURE, AGENTS
-from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT
+from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT
 
 class BaseAgent(ABC):
     """智能体基类，定义通用消息处理机制"""
@@ -42,11 +35,13 @@ class BaseAgent(ABC):
 
 class LeaderAgent(BaseAgent):
     """领导者智能体实现分层决策控制 (AvaTaR constrastive reasoning mechanism inspired contrastive reflecting)"""
-    def __init__(self, agent_id: str, workers: List[str]):
+    def __init__(self, agent_id: str, workers: List[str], inspector_id: str):
         super().__init__(agent_id)
-        self.worker_pool = workers      # 可用员工ID列表
-        self.idle = True                # 当前主任务空闲状态
-        self.task_counter = 0           # 任务ID计数
+        self.worker_pool = workers          # 可用员工ID列表
+        self.inspector_id = inspector_id    # 审查员ID
+        self.idle = True                    # 当前主任务空闲状态
+        self.task_counter = 0               # 任务ID计数
+        self.feed_back = []                 # 任务审计结果
         
     async def assign_task(self, task_description: str):
         """初始化并执行任务分配流程
@@ -63,13 +58,14 @@ class LeaderAgent(BaseAgent):
         await self._allocate_subtasks()
         await self._broadcast_tasks()
   
-    def process_feedback(self, timeout: float = 30.0):
-        """处理员工反馈（带超时机制）"""
+    def process_feedback(self):
+        """处理反馈"""
         if self.current_task['pending_workers']:
-            print("Workers have not completed their tasks")
+            print(f"Workers have not completed their tasks: {self.current_task['pending_workers']}")
             return
         print(f"Task: {self.current_task['description']}")
         print(f" └─>Response: {self.inbox}")
+        print(f"    └─>Feedback: {self.feed_back}")
         self._reset_task_state()
         # TODO: implement a more comprehensive prefrontal mechanism
         
@@ -142,14 +138,26 @@ class LeaderAgent(BaseAgent):
         """发送消息"""
         if recipient_id not in AGENTS:
             raise ValueError(f"Recipient {recipient_id} not found in global agents")
-            
         await AGENTS[recipient_id].receive_message(self.agent_id, content)    
     
+    async def _request_review(self):
+        if not self.current_task['pending_workers']:
+            self.send_message(self.inspector_id, {
+                "type": "task_review",
+                "task_id": self.current_task['id'],
+                "task_desc": self.current_task['description'],
+                "env_info": self.current_task['shared_context'],
+                "worker_resp": [{
+                    "sender_id": resp['sender_id'],
+                    "content": resp['content']
+                } for resp in self.inbox]
+            })    
+        
     async def receive_message(self, sender_id, content):
         """接收消息"""
-        if any(_subtask_['assigned_worker'] == sender_id for _subtask_ in self.current_task['subtasks']):
+        if content['type'] == "task_response" and self.current_task != None and (sender_id in self.current_task['pending_workers']):
             focus = next(_subtask_['focus'] for _subtask_ in self.current_task['subtasks'] 
-                              if _subtask_['assigned_worker'])
+                            if _subtask_['assigned_worker'])
             self.inbox.append({
                 "timestamp": time.time(),
                 "sender_id": sender_id,
@@ -157,6 +165,13 @@ class LeaderAgent(BaseAgent):
                 "content": content,
             })
             self.current_task['pending_workers'].remove(sender_id)
+            await self._request_review()
+        elif content['type'] == 'review_response' and self.current_task != None and sender_id == self.inspector_id:
+            if content['review_result']['passed']:
+                self.feed_back.append("Passed")
+            else:
+                for issue in content['review_result']['issues']:
+                    self.feed_back.append(issue)
           
     def _generate_consensus(self) -> dict: 
         """综合员工反馈生成决策共识"""
@@ -194,9 +209,9 @@ class WorkerAgent(BaseAgent):
         
     def __init__(self, agent_id: str, leader_id: str, expertise: str):
         super().__init__(agent_id)
-        self.leader_id = leader_id      # 领导
-        self.expertise = expertise      # 领域专长描述
-        self.status = self.Status.IDLE  # 状态码
+        self.leader_id = leader_id          # 领导ID
+        self.expertise = expertise          # 领域专长描述
+        self.status = self.Status.IDLE      # 状态码
 
     def _initialize_task(self, context: dict):
         """初始化新任务的基础结构"""
@@ -242,12 +257,11 @@ class WorkerAgent(BaseAgent):
         """发送信息"""
         if recipient_id not in AGENTS:
             raise ValueError(f"Recipient {recipient_id} not found in global agents")
-            
         await AGENTS[recipient_id].receive_message(self.agent_id, content)  
     
     async def receive_message(self, sender_id: str, content: dict):
         """接收信息"""
-        if sender_id == self.leader_id and content['type'] == "task_assign" and self.current_task == None and self.status == self.Status.IDLE:
+        if sender_id == self.leader_id and content['type'] == "task_assign":
             self._initialize_task(content)
         elif any(tup[0] == sender_id for tup in self.current_task['collaborators']):
             if content['type'] == "collab_request":
@@ -315,14 +329,15 @@ class WorkerAgent(BaseAgent):
             if check_work_task_fmt(resp_json):
                 # print(resp_json)
                 break
-        
+
         await self.send_message(self.leader_id, {
                 "type": "task_response",
                 "worker_id": self.agent_id,
                 "task_id": self.current_task['task_id'],
                 "subtask_id": self.current_task['subtask_id'],
                 "response": resp_json['response']
-            })    
+            })   
+         
             
     def _reset_task_state(self):
         """重置任务状态"""
@@ -356,94 +371,54 @@ class WorkerAgent(BaseAgent):
         else:
             raise ValueError(f"Unknown prompt type: {prompt_type}")
 
-@dataclass
-class TaskMetrics:
-    task_completion: float = 0.0
-    collaboration_quality: float = 0.0
-    execution_time: float = 0.0
-    error_count: int = 0
-
-class TaskStatus(Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    
-class PrefrontalOrchestrator:
-    """前额叶皮层协调中枢 (AvaTaR constrastive reasoning mechanism inspired contrastive reflecting)"""
-    def __init__(self):
-        global AGENTS
-        AGENTS = {}
+class InspectorAgent(BaseAgent):
+    """审查员智能体实现反馈审查"""
+    def __init__(self, agent_id: str, leader_id: str):
+        super().__init__(agent_id)
+        self.leader_id = leader_id      # 领导ID
+        self.idle = True                # 状态码
+        self.current_task = {           # 当前任务
+            "task_id": "",              # 任务ID
+            "task_desc": "",            # 任务描述
+            "env_info": [],             # 信息描述列表
+            "worker_resp": []           # 员工反馈列表
+        }        
         
-        self.leader = LeaderAgent("leader_01", STRUCTURE['prefrontal']['worker_ids'])
-        self.workers = {
-            wid: WorkerAgent(wid, "leader_01", STRUCTURE['prefrontal']['expertise'][wid])
-            for wid in STRUCTURE['prefrontal']['worker_ids']
-        }
-        AGENTS['leader_01'] = self.leader
-        AGENTS.update(self.workers)
+    async def task_review(self) -> dict:
+        """审查任务响应是否合理"""
+        prompt = self._construct_decision_prompt()
+        while True:
+            llm_response = query_llm(prompt)
+            resp_json = get_clean_json(llm_response)
+            if check_insp_review_fmt(resp_json):
+                print(resp_json)
+                break
+            
+        await self.send_message(self.leader_id, {
+            'type': 'review_response',
+            'task_id': self.current_task['task_id'],
+            'review_result': resp_json
+        })
+        self.idle = True   
         
-        self.current_task_status = TaskStatus.PENDING
-        self.metrics = TaskMetrics()
+    def _construct_decision_prompt(self) -> str:
+        """构建审查提示词"""
+        return INSPECTOR_REVIEW_PROMPT.format(
+            str_task_desc=self.current_task['task_desc'], 
+            str_env_info=self.current_task['env_info'], 
+            str_worker_resp=self.current_task['worker_resp']
+        )
+
+    async def send_message(self, recipient, content):
+        """发送消息"""
+        await AGENTS[recipient].receive_message(self.agent_id, content)
     
-    async def execute_decision_cycle(self, task_description: str) -> TaskMetrics:
-        """执行完整决策周期"""
-        try:
-            self.current_task_status = TaskStatus.RUNNING
-            self.metrics.execution_time = time.time()
-            await self._execute_assign_phase(task_description)
-            await self._execute_reflection_phase()
-            await self._execute_collaboration_phase()
-            await self._execute_work_phase()
-            self._process_results()
-            self.current_task_status = TaskStatus.COMPLETED
-            self.metrics.execution_time = time.time() - self.metrics.execution_time
-            return self.metrics
-
-        except Exception as e:
-            self.current_task_status = TaskStatus.FAILED
-            self.metrics.error_count += 1
-            raise
-    
-    async def _execute_assign_phase(self, task_description: str):
-        with tqdm(total=1, desc="Assign phase") as pbar:
-            await self.leader.assign_task(task_description)
-            pbar.update(1)
-
-    async def _execute_reflection_phase(self):
-        reflection_tasks = [
-            worker.refl() 
-            for worker in self.workers.values()
-            if worker.current_task is not None
-        ]
-        with tqdm(total=len(reflection_tasks), desc="Reflection phase") as pbar:
-            for task in asyncio.as_completed(reflection_tasks):
-                await task
-                pbar.update(1)
-
-    async def _execute_collaboration_phase(self):
-        collab_tasks = [
-            worker.coll()
-            for worker in self.workers.values()
-            if worker.current_task is not None
-        ]
-        with tqdm(total=len(collab_tasks), desc="Collaboration phase") as pbar:
-            for task in asyncio.as_completed(collab_tasks):
-                await task
-                pbar.update(1)
-
-    async def _execute_work_phase(self):
-        work_tasks = [
-            worker.work()
-            for worker in self.workers.values()
-            if worker.current_task is not None
-        ]
-        with tqdm(total=len(work_tasks), desc="Work phase") as pbar:
-            for task in asyncio.as_completed(work_tasks):
-                await task
-                pbar.update(1)
-    
-    def _process_results(self):
-        with tqdm(total=1, desc="Results processing") as pbar:
-            self.leader.process_feedback()
-            pbar.update(1)        
+    async def receive_message(self, sender_id: str, content: dict):
+        """接收消息"""
+        if content['type'] == 'task_review' and sender_id == self.leader_id:
+            self.idle = False
+            self.current_task['task_id'] = content['task_id']
+            self.current_task['task_desc'] = content['task_desc']
+            self.current_task['env_info'] = content['env_info']
+            self.current_task['worker_resp'] = content['worker_resp']
+ 

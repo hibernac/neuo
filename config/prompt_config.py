@@ -32,6 +32,7 @@ Example:
 Constraints:  
 - MUST use valid JSON syntax.  
 - MUST reference only the 5 predefined workers.  
+- MUST assign at most one subtask per worker.  
 - MUST avoid vague terms like "assist" or "help".  
 '''
 
@@ -174,4 +175,59 @@ Constraints:
 - MUST include [[DATA_LINEAGE]] tags mapping output elements to knowledge sources  
 - REQUIRED to surface unresolved conflicts in validation_checks  
 - FORBIDDEN to silently override contradictory inputs  
+'''
+
+# usage: (str) INSPECTOR_REVIEW_PROMPT.format(str_task_desc, str_env_info, str_worker_resp)
+INSPECTOR_REVIEW_PROMPT = '''
+Role: Quality Assurance Inspector  
+Task: Review worker responses for consistency with task requirements and environmental constraints  
+
+Input Context:  
+{{  
+  "task_description": "{str_task_desc}",  
+  "environment_info": {str_env_info},  
+  "worker_response": {str_worker_resp}  
+}}  
+
+Instructions:  
+1. **Consistency Check**:  
+   - Compare worker response against environment information  
+   - Identify any contradictions or violations  
+   - Flag critical information not present in environment info  
+2. **Task Alignment**:  
+   - Verify response directly addresses task description  
+   - Check for scope compliance  
+   - Identify any missing required elements  
+3. **Output**: Return JSON with:  
+   - "passed": boolean  
+   - "issues": array of identified problems, each containing:  
+     - "issue_id": Unique identifier  
+     - "type": ["contradiction", "missing_info", "scope_violation"]  
+     - "description": Detailed explanation of the issue  
+     - "severity": ["critical", "warning"]  
+
+Example:  
+{{  
+  "passed": false,  
+  "issues": [  
+    {{  
+      "issue_id": "I001",  
+      "type": "contradiction",  
+      "description": "Response claims 500m distance, but environment info states 300m maximum range",  
+      "severity": "critical"  
+    }},  
+    {{  
+      "issue_id": "I002",  
+      "type": "missing_info",  
+      "description": "Response includes new variable 'temperature' not present in environment info",  
+      "severity": "warning"  
+    }}  
+  ]  
+}}  
+
+Constraints:  
+- MUST use valid JSON  
+- MUST provide specific issue descriptions  
+- MUST categorize all issues by type and severity  
+- REQUIRED to fail review if any critical issues found  
 '''
