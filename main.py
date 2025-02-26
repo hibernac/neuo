@@ -2,14 +2,14 @@
 import asyncio
 from core.brain_modules.sensory import MultimodalProcessor
 from agents.coordinator import PrefrontalOrchestrator
-from memory.knowledge_graph import NeuroSemanticMemory
+from agents.thalamus import Thalamus
 
 class EmbodiedAgentSystem:
     """具身智能系统总控"""
     def __init__(self, str_task):
         self.task = str_task
         # self.sensory = MultimodalProcessor()
-        # self.memory = NeuroSemanticMemory()
+        self.info_hub = Thalamus()
         self.controller = PrefrontalOrchestrator()
         
         # 初始化智能体集群
@@ -25,15 +25,15 @@ class EmbodiedAgentSystem:
             capabilities={"joints": 12, "precision": 0.01}
         )
     
-    async def process_cycle(self, sensory_input):
+    async def process_cycle(self, processed):
         # 感知处理
         # processed = self.sensory.process(sensory_input)
         
         # 记忆整合
-        # context = self.memory.hybrid_retrieval(processed)
+        context = self.info_hub.integrated_retrieval(self.task, processed)
         
         # 决策生成
-        plan = await self.controller.execute_decision_cycle(self.task)
+        plan = await self.controller.execute_decision_cycle(self.task, context)
         print(f"Task Metrics: {plan}") # for testing
         # 任务执行
         # allocations = self.actuator.dispatch_task(plan)

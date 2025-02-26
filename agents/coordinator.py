@@ -43,7 +43,7 @@ class PrefrontalOrchestrator:
         self.current_task_status = TaskStatus.PENDING
         self.metrics = TaskMetrics()    
 
-    async def execute_decision_cycle(self, task_description: str) -> TaskMetrics:
+    async def execute_decision_cycle(self, task_description: str, context) -> TaskMetrics:
         """执行完整决策周期"""
         try:
             self.current_task_status = TaskStatus.RUNNING
@@ -52,7 +52,7 @@ class PrefrontalOrchestrator:
             estimated_total_steps = 3
 
             with tqdm(total=estimated_total_steps, desc="Initializing", dynamic_ncols=True) as pbar:
-                rf_c = await self._execute_assign_phase(task_description, pbar)
+                rf_c = await self._execute_assign_phase(task_description, context, pbar)
                 pbar.total += rf_c
                 pbar.refresh()
                 cl_c = await self._execute_reflection_phase(pbar)
@@ -71,9 +71,9 @@ class PrefrontalOrchestrator:
             self.metrics.error_count += 1
             raise
     
-    async def _execute_assign_phase(self, task_description: str, pbar):
+    async def _execute_assign_phase(self, task_description: str, context, pbar):
         pbar.set_description("Assign phase")
-        await self.leader.assign_task(task_description)
+        await self.leader.assign_task(task_description, context)
         pbar.update(1)
         return len(self.leader.current_task['subtasks'])
 

@@ -43,7 +43,7 @@ class LeaderAgent(BaseAgent):
         self.task_counter = 0               # 任务ID计数
         self.feed_back = []                 # 任务审计结果
         
-    async def assign_task(self, task_description: str):
+    async def assign_task(self, task_description: str, context):
         """初始化并执行任务分配流程
         工作流程:
         1. 任务初始化与状态检查
@@ -54,7 +54,7 @@ class LeaderAgent(BaseAgent):
         if not await self._check_availability():
             return
         task_id = self._initialize_task(task_description)
-        await self._prepare_task_context()
+        self._prepare_task_context(context)
         await self._allocate_subtasks()
         await self._broadcast_tasks()
   
@@ -91,10 +91,9 @@ class LeaderAgent(BaseAgent):
         }
         return task_id
         
-    async def _prepare_task_context(self):
+    def _prepare_task_context(self, context):
         """准备任务所需的上下文信息"""
-        shared_context = Hippocampus.retrieve_shared_context(self.current_task['description'])
-        self.current_task['shared_context'] = shared_context
+        self.current_task['shared_context'] = context
         
     async def _allocate_subtasks(self):
         """分配子任务给合适的工作者"""
