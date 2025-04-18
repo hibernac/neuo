@@ -57,6 +57,56 @@ NEURO_MODULES = {
     }
 }
 
+ACTION_LIST = {
+    "look": [
+        "straight",
+        "from left",
+        "from right",
+        "from top",
+        "from bottom"
+    ],
+    "move arm": [
+        "forward",
+        "backward",
+        "leftward",
+        "rightward",
+        "upward",
+        "downward"  
+    ],
+    "move finger": [
+        "spread",
+        "catch",
+        "twist clockwise",
+        "twist counter clockwise"
+    ]
+}
+
+SURFACE_LIST = [
+    "desk",
+    "book",
+    "box",
+    "paper",
+    "1th cabinet from top to bottom",
+    "2nd cabinet from top to bottom",
+    "3rd cabinet from top to bottom"
+]
+# find and fetch the apple
+OBJECT_LIST = [ 
+    "bottle",
+    "book",
+    "box",
+    "paper",
+    "apple"
+]
+
+POSSIBLE_BELIEF = [
+    "on the desk", "on the book", "behind the book", "under the book",
+    "on the box", "behind the box", "under the box", "in the box",
+    "on the paper", "under the paper", "in front of the cabinet",
+    "on the cabinet", "behind the cabinet", "in the 1th cabinet from top to bottom",
+    "in the 2nd cabinet from top to bottom", "in the 3rd cabinet from top to bottom"
+]
+
 # global parameters
 AGENTS = {}
 

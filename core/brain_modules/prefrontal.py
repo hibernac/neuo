@@ -1,14 +1,17 @@
 import time
 import sys
+from math import nan
+import numpy as np
 from typing import List, Dict
 from abc import ABC, abstractmethod
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/utils')
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
 from hippocampus import Hippocampus
-from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt
-from neuro_utils import workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
-from neuro_config import STRUCTURE, AGENTS
-from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT
+from basal_ganglia import BasalGanglia
+from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt
+from neuro_utils import get_action_combinations, workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
+from neuro_config import STRUCTURE, ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF, AGENTS
+from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT, PLANNER_PLAN_PROMPT
 
 class BaseAgent(ABC):
     """智能体基类，定义通用消息处理机制"""
@@ -420,4 +423,73 @@ class InspectorAgent(BaseAgent):
             self.current_task['task_desc'] = content['task_desc']
             self.current_task['env_info'] = content['env_info']
             self.current_task['worker_resp'] = content['worker_resp']
- 
+
+class PlannerAgent:
+    def __init__(self, lora_path=None):
+        self.basal = None
+        self.current_task = None
+
+    def initialize_task(self, task_description: str, initial_belief: dict):
+        self.current_task = {
+            "task": task_description,
+            "belief_history": [initial_belief],
+            "obsv_buffer": [],
+            "new_plan": {}
+        }
+        self.basal = BasalGanglia(
+            initial_probs=np.array(list(initial_belief.values()))
+        )
+
+    async def plan(self, observations: list):
+        self.current_task['obsv_buffer'] = observations
+        prompt = self._construct_decision_prompt()
+        while True:
+            llm_response = query_llm(prompt)
+            resp_json = get_clean_json(llm_response)
+            if check_plan_tree_fmt(resp_json):
+                print(resp_json)
+                break
+        
+        self.current_task['new_plan'] = resp_json
+        self._construct_dbn(resp_json)
+
+    # def generate_actions(self):
+    #     return self.basal.get_optm_action
+
+    def _construct_dbn(self, resp_json):
+        self.basal.merge_dbn_from_json(resp_json)
+        self.basal.update_cpt_from_json(resp_json)
+        self.basal.update_state_scores(resp_json, gamma=0.8)
+        
+    def _construct_decision_prompt(self):
+        return PLANNER_PLAN_PROMPT.format(
+            str_task_desc=self.current_task['task'], 
+            str_cur_state=self.basal.current_state, 
+            str_act_list=get_action_combinations(), 
+            str_obsv=self.current_task['obsv_buffer'], 
+            str_dbn=self.current_task['new_plan']
+        )
+    
+if __name__ == "__main__":
+    agent = PlannerAgent()
+    agent.initialize_task(
+        task_description="Find and fetch the apple",
+        initial_belief={loc: 1/len(POSSIBLE_BELIEF) for loc in POSSIBLE_BELIEF}
+    )
+    
+    # 模拟观测数据
+    observation = [
+        { "robot":  (0.0, 0.0, 0.0)  },
+        { "bottle": (-0.3, 0.7, 0.4) },
+        { "book":   (0.0, 0.5, 0.1)  },
+        { "box":    (0.0, 0.5, 0.2)  },
+        { "paper":  (0.3, 0.6, 0.05) },
+        { "cabinet":(0.2, 0.8, 0.5)  },
+        { "apple":  (np.nan, np.nan, np.nan) }
+    ]
+    agent.basal.ingest_observation(observation)
+    # 异步处理观测并生成动作
+    import asyncio
+    asyncio.run(agent.plan(observation))
+    
+    # print("Optimal actions:", agent.generate_actions())

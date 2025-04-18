@@ -4,7 +4,7 @@ import torch
 import networkx as nx
 import numpy as np
 from typing import List, Tuple
-from memory.knowledge_graph import NeuroSemanticMemory
+from knowledge_graph import NeuroSemanticMemory
 
 class Hippocampus:
     def __init__(self):

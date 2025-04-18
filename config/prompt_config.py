@@ -231,3 +231,75 @@ Constraints:
 - MUST categorize all issues by type and severity  
 - REQUIRED to fail review if any critical issues found  
 '''
+
+# usage: (str) PLANNER_PLAN_PROMPT.format(str_task_desc, str_cur_state, str_act_list, str_obsv, str_dbn)
+PLANNER_PLAN_PROMPT = '''
+{{  
+  "task_description": "{str_task_desc}",  
+  "current_state": {str_cur_state},  
+  "available_actions": {str_act_list},  
+  "observations": {str_obsv},  
+  "dbn": {str_dbn}  
+}}  
+
+Instructions:  
+1. **At-Most-Five-Layer State Transition Tree**:  
+   - Use DBN to predict state transitions in tree structure  
+   - Consider transition probabilities for each branch  
+   - Factor in current observations  
+   - Start from current_state as root node  
+2. **State Scoring**:  
+   - Evaluate each state's alignment with goal  
+   - Score range: 0 (poor) to 1 (optimal)  
+   - Consider:  
+     - Goal proximity  
+     - Safety constraints  
+     - Resource efficiency  
+3. **Action-State Tree Generation**:  
+   - Build tree with states as nodes and actions as edges  
+   - Calculate probabilities for each transition  
+   - Evaluate each state for goal conditions  
+   - Prune invalid or unsafe branches  
+4. **Output Format**:  
+   Return JSON with structure:  
+   {{  
+     "next_state": {{  
+       "state": "<current_state>",  
+       "score": <float>,  
+       "is_goal": <boolean>,  
+       "transitions": [  
+         {{  
+           "action": "<action_name>",  
+           "probability": <float>,  
+           "next_state": {{  
+             "state": "<resulting_state>",  
+             "score": <float>,  
+             "is_goal": <boolean>,  
+             "transitions": [  
+               {{  
+                 "action": "<action_name>",  
+                 "probability": <float>,  
+                 "next_state": {{  
+                   "state": "<resulting_state>",  
+                   "score": <float>,  
+                   "is_goal": <boolean>,  
+                   "transitions": []  
+                 }}  
+               }},  
+               ...  
+             ]  
+           }}  
+         }},  
+         ...  
+       ]  
+     }}  
+   }}  
+
+Constraints:  
+- Return ONLY valid JSON  
+- Handle partial observations  
+- Return empty transitions array for goal states or leaf nodes  
+- All scores must be 0-1 range  
+- All transition probabilities from a state must sum to 1.0  
+- Consider only valid actions from available_actions  
+'''

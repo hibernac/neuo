@@ -5,6 +5,7 @@ import requests
 import sys
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
 from api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
+from neuro_config import ACTION_LIST
 from scipy.signal import welch
 
 def workers_info_list2str(workers):
@@ -21,20 +22,13 @@ def list2str(a):
 def knowledge_info_list2str(knowledge):
     return json.dumps(knowledge, indent=2, ensure_ascii=False)
 
-# class NeuralDynamicAnalyzer:
-#     """神经动力学分析工具 (检测1/f噪声特征)"""
-#     def __init__(self, sampling_rate=1000):
-#         self.fs = sampling_rate
-        
-#     def analyze_powerlaw(self, signal):
-#         freqs, psd = welch(signal, self.fs)
-#         slope, _ = np.polyfit(np.log(freqs[1:]), np.log(psd[1:]), 1)
-#         return slope
-    
-#     def detect_criticality(self, signals):
-#         slopes = [self.analyze_powerlaw(s) for s in signals]
-#         return np.mean(slopes)
-    
+def get_action_combinations():
+    action_combinations = []
+    for action, directions in ACTION_LIST.items():
+        for direction in directions:
+            action_combinations.append(f"{action} {direction}")
+    return action_combinations
+
 def get_clean_json(llm_response):    
     try:
         content = llm_response["choices"][0]["message"]["content"]

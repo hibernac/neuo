@@ -10,7 +10,7 @@ sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/util')
 from neuro_config import ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF
 from neuro_utils import query_llm
 
-class BasalGanglia:
+class DynamicBayesianNetwork:
     # 初始化动态贝叶斯网络，接收初始概率、转移模型和发射模型作为参数
     def __init__(self, initial_probs):
         self.dbn = {}

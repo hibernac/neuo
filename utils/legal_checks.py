@@ -153,3 +153,50 @@ def check_insp_review_fmt(response_json):
             
     except Exception:
         return False
+    
+def check_plan_tree_fmt(response_json):
+    try:
+        if isinstance(response_json, str):
+            response_json = json.loads(response_json)
+            
+        if "next_state" not in response_json:
+            return False
+            
+        def validate_state(state_obj):
+            if not isinstance(state_obj, dict):
+                return False
+                
+            required_fields = ["state", "score", "is_goal", "transitions"]
+            if not all(field in state_obj for field in required_fields):
+                return False
+                
+            if not isinstance(state_obj["state"], str):
+                return False
+            if not isinstance(state_obj["score"], (int, float)):
+                return False
+            if not isinstance(state_obj["is_goal"], bool):
+                return False
+            if not isinstance(state_obj["transitions"], list):
+                return False
+                
+            for transition in state_obj["transitions"]:
+                if not isinstance(transition, dict):
+                    return False
+                    
+                required_trans_fields = ["action", "probability", "next_state"]
+                if not all(field in transition for field in required_trans_fields):
+                    return False
+                    
+                if not isinstance(transition["action"], str):
+                    return False
+                if not isinstance(transition["probability"], (int, float)):
+                    return False
+                if not validate_state(transition["next_state"]):
+                    return False
+                    
+            return True
+            
+        return validate_state(response_json["next_state"])
+            
+    except Exception:
+        return False
