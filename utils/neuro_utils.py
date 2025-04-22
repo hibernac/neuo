@@ -3,9 +3,11 @@ import openai
 import json
 import requests
 import sys
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
-from api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
-from neuro_config import ACTION_LIST
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
+from config.api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
+from config.neuro_config import ACTION_LIST
 from scipy.signal import welch
 
 def workers_info_list2str(workers):

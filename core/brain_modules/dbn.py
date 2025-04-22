@@ -4,11 +4,11 @@ import json
 import argparse
 from typing import Callable
 import sys
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core')
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/util')
-from neuro_config import ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF
-from neuro_utils import query_llm
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
+from config.neuro_config import ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF
+from utils.neuro_utils import query_llm
 
 class DynamicBayesianNetwork:
     # 初始化动态贝叶斯网络，接收初始概率、转移模型和发射模型作为参数
