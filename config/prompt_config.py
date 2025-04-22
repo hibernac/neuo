@@ -237,7 +237,7 @@ Constraints:
 
 # usage: (str) PLANNER_PLAN_PROMPT.format(str_task_desc, str_cur_state, str_act_list, str_obsv, str_htn)
 PLANNER_PLAN_PROMPT = '''
-Role: AI Planning Expert specialized in hierarchical task network (HTN) planning.  
+Role: AI Planning Expert specialized in HTN planning.  
 Task: Generate a detailed state transition tree that maps possible future states and their outcomes based on available actions, while considering previous HTN.
 
 Input Context:  
@@ -327,6 +327,8 @@ Instructions:
    - Analyze current state and task objectives  
    - Evaluate available actions for feasibility and safety  
    - Select the single best action for current context  
+   - Add a moving distance to certain actions  
+   - Reason should be concise  
 2. **Output Format**:  
    Return JSON with structure:  
    {{  

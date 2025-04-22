@@ -503,6 +503,9 @@ class PlannerAgent:
                 heapq.heappush(pq, (-new_score, transition_prob, new_actions, next_node))
         return best_path if best_path else []
     
+    def get_optm_action(self):
+        return self.current_task['optm_actions']
+    
     def _construct_htn(self, resp_json, view=True):
         self.basal.merge_htn_from_json(resp_json)
         self.basal.update_state_scores(resp_json, gamma=0.8)
@@ -600,7 +603,7 @@ if __name__ == "__main__":
             task2 = await selector.select_action()
         
         # await asyncio.gather(task1, task2)
-        print("Optimal action sequence:", planner.generate_actions())
+        print("Optimal action sequence:", planner.get_optm_action())
         if task2:
             print("Selected action:", task2)
     
