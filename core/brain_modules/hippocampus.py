@@ -1,10 +1,12 @@
 import sys
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/memory')
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
 import torch
 import networkx as nx
 import numpy as np
 from typing import List, Tuple
-from knowledge_graph import NeuroSemanticMemory
+from memory.knowledge_graph import NeuroSemanticMemory
 
 class Hippocampus:
     def __init__(self):
