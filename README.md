@@ -37,3 +37,18 @@ transformer==4.50.3
 torch
 graphviz
 scipy==1.15.2
+
+### How to run
+
+1. 在`neuro_congig.py`的 `STRUCTURE`中设置多智能体架构、动作集
+2. 全局定义`task`字段，`context`全局object信息
+3. 初始化`leaderAgent`,`pipelineAgent`,`workerAgent`,`InspectorAgent`,`plannerAgent`
+4. 通过`planner.basal.ingest_observation(observation)`插入观测值
+5. 通过
+```python
+selector = ActionSelectorAgent()
+selector.initialize_task(task, planner.basal.current_state)
+selector.ingest_partial_obsv(observation)
+```
+选择动作
+6. `planner.get_optm_action()`获取当前预测的下一步动作
