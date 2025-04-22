@@ -1,7 +1,7 @@
 # usage: (str) LEADER_PROMPT.format(str_worker_info, str_mission)
 LEADER_PROMPT = '''
 Role: Expert Project Coordinator  
-Task: Decompose the following mission into subtasks, assign each to the most suitable worker based on their expertise, and output the plan in JSON format.  
+Task: Assess the difficulty of the task. Decompose the following mission into subtasks, assign each to the most suitable worker based on their expertise, and output the plan in JSON format.  
 
 Worker Expertise Database:  
 {str_worker_info}  
@@ -9,7 +9,9 @@ Worker Expertise Database:
 Mission: "{str_mission}"  
 
 Instructions:  
-1. **Think**: Analyze the mission's key components and map them to worker expertise.  
+1. **Think**: 
+   - Assess the difficulty of the task, and label it with 'low' (e.g. walk to the desk), 'medium' (e.g. fetch an apple on the desk), or 'high' (e.g. make a chicken sandwich in the kitchen).  
+   - Analyze the mission's key components and map them to worker expertise.  
 2. **Plan**: Split the mission into subtasks. Each subtask must include:  
    - "subtask_id": Unique identifier  
    - "assigned_worker": Worker_X (strictly from the database)  
@@ -19,6 +21,7 @@ Instructions:
 
 Example:  
 {{  
+  "difficulty": "medium",  
   "subtasks": [  
     {{  
       "subtask_id": "ST1",  
@@ -232,32 +235,36 @@ Constraints:
 - REQUIRED to fail review if any critical issues found  
 '''
 
-# usage: (str) PLANNER_PLAN_PROMPT.format(str_task_desc, str_cur_state, str_act_list, str_obsv, str_dbn)
+# usage: (str) PLANNER_PLAN_PROMPT.format(str_task_desc, str_cur_state, str_act_list, str_obsv, str_htn)
 PLANNER_PLAN_PROMPT = '''
+Role: AI Planning Expert specialized in hierarchical task network (HTN) planning.  
+Task: Generate a detailed state transition tree that maps possible future states and their outcomes based on available actions, while considering previous HTN.
+
+Input Context:  
 {{  
   "task_description": "{str_task_desc}",  
   "current_state": {str_cur_state},  
   "available_actions": {str_act_list},  
   "observations": {str_obsv},  
-  "dbn": {str_dbn}  
+  "htn": {str_htn}  
 }}  
 
 Instructions:  
 1. **At-Most-Five-Layer State Transition Tree**:  
-   - Use DBN to predict state transitions in tree structure  
+   - Start from current_state as root node  
+   - Expand HTN to predict state transitions in tree structure  
    - Consider transition probabilities for each branch  
    - Factor in current observations  
-   - Start from current_state as root node  
 2. **State Scoring**:  
    - Evaluate each state's alignment with goal  
    - Score range: 0 (poor) to 1 (optimal)  
    - Consider:  
      - Goal proximity  
+     - Transition possibility  
      - Safety constraints  
      - Resource efficiency  
 3. **Action-State Tree Generation**:  
    - Build tree with states as nodes and actions as edges  
-   - Calculate probabilities for each transition  
    - Evaluate each state for goal conditions  
    - Prune invalid or unsafe branches  
 4. **Output Format**:  
@@ -297,9 +304,38 @@ Instructions:
 
 Constraints:  
 - Return ONLY valid JSON  
-- Handle partial observations  
 - Return empty transitions array for goal states or leaf nodes  
-- All scores must be 0-1 range  
-- All transition probabilities from a state must sum to 1.0  
-- Consider only valid actions from available_actions  
+- All scores MUST be 0-1 range  
+- Consider ONLY valid actions from available_actions  
+'''
+
+# usage: (str) ACTION_SELECTOR_PROMPT.format(str_task_desc, str_cur_state, str_act_list, str_obsv)
+ACTION_SELECTOR_PROMPT = '''
+Role: Action selection agent  
+Task: Analyze the current context and select the most appropriate action that advances toward the task objective while maintaining safety and efficiency.  
+
+Input Context:  
+{{  
+  "task_description": "{str_task_desc}",  
+  "current_state": {str_cur_state},  
+  "available_actions": {str_act_list},  
+  "observations": {str_obsv}  
+}}  
+
+Instructions:  
+1. **Action Selection**:  
+   - Analyze current state and task objectives  
+   - Evaluate available actions for feasibility and safety  
+   - Select the single best action for current context  
+2. **Output Format**:  
+   Return JSON with structure:  
+   {{  
+     "selected_action": "<action_name>",  
+     "reason": "<brief explanation for selection>"  
+   }}  
+
+Constraints:  
+- Return ONLY valid JSON  
+- Selected action MUST be from available_actions list  
+- Reason should be a brief, clear explanation  
 '''

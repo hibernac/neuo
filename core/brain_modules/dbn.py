@@ -13,7 +13,7 @@ from neuro_utils import query_llm
 class DynamicBayesianNetwork:
     # 初始化动态贝叶斯网络，接收初始概率、转移模型和发射模型作为参数
     def __init__(self, initial_probs):
-        self.dbn = {}
+        self.htn = {}
         self.cpt = {}
         self.state_score = {}
         self.current_state = "start state"
@@ -105,18 +105,18 @@ class DynamicBayesianNetwork:
                 # Update covariance
                 self.belief_covariance[obj] = (np.eye(3) - K) @ self.belief_covariance[obj]
     
-    def merge_dbn_from_json(self, llm_response: dict):
+    def merge_htn_from_json(self, llm_response: dict):
         def extract_transitions(node, parent_state):
             for transition in node.get('transitions', []):
                 action = transition['action']
                 next_state = transition['next_state']['state']
                 
-                if parent_state not in self.dbn:
-                    self.dbn[parent_state] = {}
-                if action not in self.dbn[parent_state]:
-                    self.dbn[parent_state][action] = []
-                if next_state not in self.dbn[parent_state][action]:
-                    self.dbn[parent_state][action].append(next_state)
+                if parent_state not in self.htn:
+                    self.htn[parent_state] = {}
+                if action not in self.htn[parent_state]:
+                    self.htn[parent_state][action] = []
+                if next_state not in self.htn[parent_state][action]:
+                    self.htn[parent_state][action].append(next_state)
                 
                 extract_transitions(transition['next_state'], next_state)
 
@@ -255,7 +255,7 @@ class DynamicBayesianNetwork:
 
     # 使用LLM优化模型参数
     def _llm_refine_parameters(self, params):
-        prompt = f"""Optimize DBN parameters considering context: 
+        prompt = f"""Optimize HTN parameters considering context: 
         Initial probs: {params['initial_probs']}, 
         Transition matrix: {params['transition_probs']}"""
         response = query_llm(prompt)

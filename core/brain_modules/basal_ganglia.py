@@ -1,7 +1,9 @@
 import numpy as np
-import torch
 import json
 import argparse
+import graphviz
+import matplotlib.pyplot as plt
+import networkx as nx
 from typing import Callable
 import sys
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
@@ -12,40 +14,39 @@ from neuro_utils import query_llm
 
 class BasalGanglia:
     # 初始化动态贝叶斯网络，接收初始概率、转移模型和发射模型作为参数
-    def __init__(self, initial_probs):
-        self.dbn = {}
-        self.cpt = {}
-        self.state_score = {}
+    def __init__(self):
+        self.htn = {}
+        self.state_scores = {}
         self.current_state = "start state"
+        self.last_action = ""
         self.states = []
         self.observations = []
-        self.initial_probs = initial_probs
+        self.initial_probs = {loc: 1/len(POSSIBLE_BELIEF) for loc in POSSIBLE_BELIEF}
         self.n_states = len(POSSIBLE_BELIEF)
         self.current_params = {
-            'initial_probs': initial_probs,
+            'initial_probs': self.initial_probs,
             'transition_probs': np.ones((self.n_states, self.n_states)) / self.n_states,
             'emission_probs': np.ones((self.n_states, 3)) / 3
         }
-        self.belief_mean = {
+        self.belief_mean = {  # Unknown initial position
+            'robot': ([0.0, 0.0, 0.0]),
             'bottle': np.array([np.nan, np.nan, np.nan]),
             'book': np.array([np.nan, np.nan, np.nan]),
             'box': np.array([np.nan, np.nan, np.nan]),
             'paper': np.array([np.nan, np.nan, np.nan]),
             'cabinet': np.array([np.nan, np.nan, np.nan]),
-            'apple': np.array([np.nan, np.nan, np.nan])  # Unknown initial position
+            'apple': np.array([np.nan, np.nan, np.nan])
         }
-        belief_covariance = {obj: np.eye(3) * 0.1 for obj in self.belief_mean}
+        self.belief_covariance = {obj: np.eye(3) * 0.1 for obj in self.belief_mean}
 
     # 接收新的观察数据并更新状态
-    def ingest_observation(self, observation: list, last_action=None):
-        # self.observations.extend(observation)
-        # self._forward_pass(observation)
+    def ingest_observation(self, observation: list):
+        self.observations.extend(observation)
         obsv = self._transform_observations(observation)
-        self._predict(last_action)
+        self._predict(self.last_action)
         self._update(obsv)
-        pass
     
-    def _transform_observations(obs_list):
+    def _transform_observations(self, obs_list):
         obs_dict = {}
         for item in obs_list:
             for key, value in item.items():
@@ -105,43 +106,25 @@ class BasalGanglia:
                 # Update covariance
                 self.belief_covariance[obj] = (np.eye(3) - K) @ self.belief_covariance[obj]
     
-    def merge_dbn_from_json(self, llm_response: dict):
-        def extract_transitions(node, parent_state):
+    def merge_htn_from_json(self, llm_response: dict):
+        def extract_transitions(node, parent_state, found_current):
             for transition in node.get('transitions', []):
                 action = transition['action']
                 next_state = transition['next_state']['state']
                 
-                if parent_state not in self.dbn:
-                    self.dbn[parent_state] = {}
-                if action not in self.dbn[parent_state]:
-                    self.dbn[parent_state][action] = []
-                if next_state not in self.dbn[parent_state][action]:
-                    self.dbn[parent_state][action].append(next_state)
-                
-                extract_transitions(transition['next_state'], next_state)
+                if parent_state not in self.htn:
+                    self.htn[parent_state] = {}
+                if action not in self.htn[parent_state]:
+                    self.htn[parent_state][action] = []
+                if next_state not in self.htn[parent_state][action]:
+                    self.htn[parent_state][action].append(next_state)
+                if found_current == 0:
+                    self.current_state = next_state
+                    found_current = 1
+                extract_transitions(transition['next_state'], next_state, found_current)
 
         root = llm_response['next_state']
-        extract_transitions(root, self.current_state)
-    
-    def update_cpt_from_json(self, llm_response: dict):
-        def process_node(node, source_state):
-            total_prob = sum(t['probability'] for t in node.get('transitions', []))
-            
-            for transition in node.get('transitions', []):
-                action = transition['action']
-                prob = transition['probability'] / total_prob
-                next_state = transition['next_state']['state']
-                
-                if source_state not in self.cpt:
-                    self.cpt[source_state] = {}
-                if action not in self.cpt[source_state]:
-                    self.cpt[source_state][action] = {}
-                self.cpt[source_state][action][next_state] = prob
-                
-                process_node(transition['next_state'], next_state)
-
-        root = llm_response['next_state']
-        process_node(root, self.current_state)
+        extract_transitions(root, self.current_state, 0)
     
     def update_state_scores(self, llm_response: dict, gamma: float = 0.8):
         def traverse(node):
@@ -155,13 +138,6 @@ class BasalGanglia:
                 traverse(transition['next_state'])
 
         traverse(llm_response['next_state'])
-    
-    def _forward_pass(self, observations: list):
-        if not self.states:
-            predicted_state = self.initial_probs
-        else:
-            predicted_state = self._transition_model(self.states[-1], observations)
-        self.states.append(predicted_state)
 
     def _transition_model(self, prev_state, observations: list):
         all_obs_features = []
@@ -191,11 +167,7 @@ class BasalGanglia:
     def run_em(self, max_iter=100, tol=1e-5, llm_assist=False):
         for _ in range(max_iter):
             state_posteriors = self._e_step()
-            if llm_assist:
-                state_posteriors = self._llm_refine_states(state_posteriors)
             new_params = self._m_step(state_posteriors)
-            if llm_assist:
-                new_params = self._llm_refine_parameters(new_params)
             if self._check_convergence(new_params, tol):
                 break
             self.current_params = new_params
@@ -245,21 +217,32 @@ class BasalGanglia:
             'transition_probs': new_transition,
             'emission_probs': new_emission
         }
-
-    # 使用LLM优化状态概率
-    def _llm_refine_states(self, posteriors):
-        prompt = f"""Refine state probabilities based on observations: 
-        {self.observations[-5:]} and current posteriors: {posteriors[-1]}"""
-        response = query_llm(prompt)
-        return np.array(response['refined_posteriors'])
-
-    # 使用LLM优化模型参数
-    def _llm_refine_parameters(self, params):
-        prompt = f"""Optimize DBN parameters considering context: 
-        Initial probs: {params['initial_probs']}, 
-        Transition matrix: {params['transition_probs']}"""
-        response = query_llm(prompt)
-        return response['refined_params']
+    
+    def visualize_htn(self, dict_data, save_path=None):
+        def build_graph(G, node, parent=None, action=None):
+            state_name = node["state"]
+            score = node["score"]
+            is_goal = node["is_goal"]
+            G.add_node(state_name, score=score, is_goal=is_goal)
+            if parent and action:
+                G.add_edge(parent, state_name, action=action)
+            for transition in node.get("transitions", []):
+                build_graph(G, transition["next_state"], state_name, transition["action"])
+        
+        G = nx.DiGraph()
+        next_state = dict_data["next_state"]
+        build_graph(G, next_state)
+        plt.figure(figsize=(10, 6))
+        pos = nx.spring_layout(G)
+        node_colors = ["red" if G.nodes[n]["is_goal"] else "lightblue" for n in G.nodes]
+        nx.draw(G, pos, with_labels=True, node_color=node_colors, node_size=2000, edge_color="black", font_size=10, font_weight="bold")
+        edge_labels = {(u, v): d["action"] for u, v, d in G.edges(data=True)}
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=9, font_color="blue")
+        if save_path:
+            plt.savefig(save_path, format="png", dpi=300)
+        else:
+            plt.show()
+        return G
 
     # 检查算法是否收敛
     def _check_convergence(self, new_params, tol):

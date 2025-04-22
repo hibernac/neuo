@@ -1,6 +1,7 @@
 import time
 import sys
 from math import nan
+import heapq
 import numpy as np
 from typing import List, Dict
 from abc import ABC, abstractmethod
@@ -8,10 +9,10 @@ sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/utils')
 sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
 from hippocampus import Hippocampus
 from basal_ganglia import BasalGanglia
-from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt
-from neuro_utils import get_action_combinations, workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm
+from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
+from neuro_utils import get_action_combinations, workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm, decode_difficulty_from_json
 from neuro_config import STRUCTURE, ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF, AGENTS
-from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT, PLANNER_PLAN_PROMPT
+from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT, PLANNER_PLAN_PROMPT, ACTION_SELECTOR_PROMPT
 
 class BaseAgent(ABC):
     """智能体基类，定义通用消息处理机制"""
@@ -37,7 +38,7 @@ class BaseAgent(ABC):
         pass
 
 class LeaderAgent(BaseAgent):
-    """领导者智能体实现分层决策控制 (AvaTaR constrastive reasoning mechanism inspired contrastive reflecting)"""
+    """领导者智能体实现分层决策控制"""
     def __init__(self, agent_id: str, workers: List[str], inspector_id: str):
         super().__init__(agent_id)
         self.worker_pool = workers          # 可用员工ID列表
@@ -59,7 +60,6 @@ class LeaderAgent(BaseAgent):
         task_id = self._initialize_task(task_description)
         self._prepare_task_context(context)
         await self._allocate_subtasks()
-        await self._broadcast_tasks()
   
     def process_feedback(self):
         """处理反馈"""
@@ -105,13 +105,20 @@ class LeaderAgent(BaseAgent):
             llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_lead_fmt(resp_json):
-                # print(resp_json)
+                print(resp_json)
                 break
-                
-        self.current_task['subtasks'] = filter_subtasks_by_workers(
-            resp_json, self.worker_pool
-        )
         
+        difficulty = decode_difficulty_from_json(resp_json)
+        if difficulty == 'high':
+            self.current_task['subtasks'] = filter_subtasks_by_workers(
+                resp_json, self.worker_pool
+            )
+            await self._broadcast_tasks()
+        await self.send_message('Pipeline_0', {
+            'type': 'task_difficulty',
+            'level': difficulty
+        })   
+    
     async def _broadcast_tasks(self):
         """向选定的工作者广播任务"""
         for subtask in self.current_task['subtasks']:
@@ -424,21 +431,40 @@ class InspectorAgent(BaseAgent):
             self.current_task['env_info'] = content['env_info']
             self.current_task['worker_resp'] = content['worker_resp']
 
+class PipelineAgent(BaseAgent):
+    def __init__(self, agent_id: str, leader_id: str):
+        super().__init__(agent_id)
+        self.leader_id = leader_id          # 领导ID
+        self.ext_alloc = 0
+    
+    async def send_message(self, recipient_id: str, content: dict):
+        return
+    
+    async def receive_message(self, sender_id: str, content: dict):
+        if sender_id == self.leader_id and content['type'] == 'task_difficulty':
+            if content['level'] == 'low':
+                self.ext_alloc = 1
+            else:
+                self.ext_alloc = 2
+        return
+    
+    def _construct_decision_prompt(self):
+        return
+
+
 class PlannerAgent:
-    def __init__(self, lora_path=None):
+    def __init__(self):
         self.basal = None
         self.current_task = None
 
-    def initialize_task(self, task_description: str, initial_belief: dict):
+    def initialize_task(self, task_description: str):
         self.current_task = {
             "task": task_description,
-            "belief_history": [initial_belief],
             "obsv_buffer": [],
-            "new_plan": {}
+            "new_plan": {},
+            "optm_actions": []
         }
-        self.basal = BasalGanglia(
-            initial_probs=np.array(list(initial_belief.values()))
-        )
+        self.basal = BasalGanglia()
 
     async def plan(self, observations: list):
         self.current_task['obsv_buffer'] = observations
@@ -451,15 +477,36 @@ class PlannerAgent:
                 break
         
         self.current_task['new_plan'] = resp_json
-        self._construct_dbn(resp_json)
+        self._construct_htn(resp_json)
+        self.current_task['optm_actions'] = self.generate_actions(resp_json)
 
-    # def generate_actions(self):
-    #     return self.basal.get_optm_action
-
-    def _construct_dbn(self, resp_json):
-        self.basal.merge_dbn_from_json(resp_json)
-        self.basal.update_cpt_from_json(resp_json)
+    def generate_actions(self, htn_data):
+        start_state = htn_data["next_state"]
+        pq = []
+        heapq.heappush(pq, (-start_state["score"], 1.0, [], start_state))
+        best_path = None
+        best_score = float("-inf")
+        while pq:
+            neg_score, probability, actions, node = heapq.heappop(pq)
+            current_score = -neg_score
+            if node["is_goal"]:
+                if current_score > best_score:
+                    best_score = current_score
+                    best_path = actions
+                continue
+            for transition in node.get("transitions", []):
+                next_node = transition["next_state"]
+                action = transition["action"]
+                transition_prob = transition["probability"]
+                new_score = current_score * transition_prob
+                new_actions = actions + [action]
+                heapq.heappush(pq, (-new_score, transition_prob, new_actions, next_node))
+        return best_path if best_path else []
+    
+    def _construct_htn(self, resp_json, view=True):
+        self.basal.merge_htn_from_json(resp_json)
         self.basal.update_state_scores(resp_json, gamma=0.8)
+        self.basal.visualize_htn(resp_json)
         
     def _construct_decision_prompt(self):
         return PLANNER_PLAN_PROMPT.format(
@@ -467,15 +514,69 @@ class PlannerAgent:
             str_cur_state=self.basal.current_state, 
             str_act_list=get_action_combinations(), 
             str_obsv=self.current_task['obsv_buffer'], 
-            str_dbn=self.current_task['new_plan']
+            str_htn=self.current_task['new_plan']
         )
     
+class ActionSelectorAgent:
+    def __init__(self):
+        self.current_task = {
+            'task': "",
+            'current_state': "",
+            'obsv_buffer': [],
+            'action_list': [],
+            'selected_action': []
+        }
+        
+    def initialize_task(self, task_description: str, current_state: str):
+        self.current_task['task'] = task_description
+        self.current_task['current_state'] = current_state
+        self.current_task['action_list'] = get_action_combinations() 
+        
+    def ingest_partial_obsv(self, observation: list):
+        self.current_task['obsv_buffer'].append(observation)
+        
+    async def select_action(self):
+        prompt = self._construct_selection_prompt()
+        while True:
+            llm_response = query_llm(prompt)
+            resp_json = get_clean_json(llm_response)
+            if check_action_fmt(resp_json):
+                print(resp_json)
+                break
+                
+        self.current_task['selected_action'] = resp_json['selected_action']
+        return self.current_task['selected_action']
+    
+    def _construct_selection_prompt(self):
+        return ACTION_SELECTOR_PROMPT.format(
+            str_task_desc=self.current_task['task'],
+            str_cur_state=self.current_task['current_state'],
+            str_act_list=self.current_task['action_list'],
+            str_obsv=self.current_task['obsv_buffer']
+        )    
+
 if __name__ == "__main__":
-    agent = PlannerAgent()
-    agent.initialize_task(
-        task_description="Find and fetch the apple",
-        initial_belief={loc: 1/len(POSSIBLE_BELIEF) for loc in POSSIBLE_BELIEF}
-    )
+    import asyncio
+
+    context = {  # Unknown initial position
+        'robot': ([0.0, 0.0, 0.0]),
+        'bottle': np.array([np.nan, np.nan, np.nan]),
+        'book': np.array([np.nan, np.nan, np.nan]),
+        'box': np.array([np.nan, np.nan, np.nan]),
+        'paper': np.array([np.nan, np.nan, np.nan]),
+        'cabinet': np.array([np.nan, np.nan, np.nan]),
+        'apple': np.array([np.nan, np.nan, np.nan])
+    }
+    task = "Find and fetch the apple"
+    
+    leader = LeaderAgent(STRUCTURE['prefrontal']['leader_ids'][0], STRUCTURE['prefrontal']['worker_ids'], None)
+    pipe = PipelineAgent(STRUCTURE['prefrontal']['pipeline_ids'][0], leader.agent_id)
+    AGENTS[leader.agent_id] = leader
+    AGENTS[pipe.agent_id] = pipe
+    asyncio.run(leader.assign_task(task, context))  
+    
+    planner = PlannerAgent()
+    planner.initialize_task(task)
     
     # 模拟观测数据
     observation = [
@@ -487,9 +588,20 @@ if __name__ == "__main__":
         { "cabinet":(0.2, 0.8, 0.5)  },
         { "apple":  (np.nan, np.nan, np.nan) }
     ]
-    agent.basal.ingest_observation(observation)
-    # 异步处理观测并生成动作
-    import asyncio
-    asyncio.run(agent.plan(observation))
+    planner.basal.ingest_observation(observation)
     
-    # print("Optimal actions:", agent.generate_actions())
+    async def run_tasks():
+        task1 = await planner.plan(observation)
+        task2 = None
+        if pipe.ext_alloc == 2:
+            selector = ActionSelectorAgent()
+            selector.initialize_task(task, planner.basal.current_state)
+            selector.ingest_partial_obsv(observation)
+            task2 = await selector.select_action()
+        
+        # await asyncio.gather(task1, task2)
+        print("Optimal action sequence:", planner.generate_actions())
+        if task2:
+            print("Selected action:", task2)
+    
+    asyncio.run(run_tasks())        

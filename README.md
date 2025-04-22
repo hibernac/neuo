@@ -29,3 +29,11 @@ brain_embodied_agent/
     ├── neuro_config.py        # 脑区参数配置
     └── prompt_config.py       # 提示词配置
 ```
+
+### Requirements
+
+openai==1.69.0
+transformer==4.50.3
+torch
+graphviz
+scipy==1.15.2

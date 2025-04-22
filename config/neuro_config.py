@@ -1,6 +1,8 @@
 # system config
 STRUCTURE = {
     "prefrontal": {
+        "pipeline_number": 1,
+        "pipeline_ids": [ "Pipeline_0" ],
         "leader_number": 1,
         "leader_ids": [ "Leader_0" ],
         "worker_number": 5,

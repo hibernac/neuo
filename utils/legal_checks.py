@@ -7,13 +7,17 @@ def check_lead_fmt(response_json):
             response_json = json.loads(response_json)
         
         # Check if response has 'subtasks' key
-        if 'subtasks' not in response_json:
+        if 'difficulty' not in response_json or 'subtasks' not in response_json:
+            return False
+                
+        # Check if difficulty is valid
+        if not isinstance(response_json['difficulty'], str) or response_json['difficulty'] not in ['low', 'medium', 'high']:
             return False
                 
         # Check if subtasks is a list
         if not isinstance(response_json['subtasks'], list):
             return False
-                
+        
         # Validate each subtask
         for subtask in response_json['subtasks']:
             # Check required keys
@@ -153,7 +157,7 @@ def check_insp_review_fmt(response_json):
             
     except Exception:
         return False
-    
+
 def check_plan_tree_fmt(response_json):
     try:
         if isinstance(response_json, str):
@@ -198,5 +202,21 @@ def check_plan_tree_fmt(response_json):
             
         return validate_state(response_json["next_state"])
             
+    except Exception:
+        return False
+    
+def check_action_fmt(response_json):
+    try:
+        if isinstance(response_json, str):
+            response_json = json.loads(response_json)
+        required_fields = ["selected_action", "reason"]
+        if not all(field in response_json for field in required_fields):
+            return False
+        if not isinstance(response_json["selected_action"], str):
+            return False
+        if not isinstance(response_json["reason"], str):
+            return False
+        return True
+    
     except Exception:
         return False

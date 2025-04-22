@@ -70,3 +70,12 @@ def filter_subtasks_by_workers(json_data, allowed_pool):
         return filtered_subtasks
     except json.JSONDecodeError:
         return []
+
+def decode_difficulty_from_json(json_data):
+    """从LLM输出中解析难度"""
+    try:
+        data = json.loads(json_data) if isinstance(json_data, str) else json_data
+        difficulty = data.get("difficulty", "low")
+        return difficulty
+    except json.JSONDecodeError:
+        return "low"

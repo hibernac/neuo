@@ -1,0 +1,22 @@
+digraph {
+	"start state" [label="start state
+Score: 0.2" color=red shape=ellipse style=filled]
+	"looking straight" [label="looking straight
+Score: 0.3" color=black shape=ellipse style=solid]
+	"start state" -> "looking straight" [label="look straight"]
+	"arm near book" [label="arm near book
+Score: 0.4" color=black shape=ellipse style=solid]
+	"looking straight" -> "arm near book" [label="move arm forward"]
+	"arm near apple's suspected location" [label="arm near apple's suspected location
+Score: 0.6" color=black shape=ellipse style=solid]
+	"arm near book" -> "arm near apple's suspected location" [label="move arm upward"]
+	"looking from left" [label="looking from left
+Score: 0.3" color=black shape=ellipse style=solid]
+	"start state" -> "looking from left" [label="look from left"]
+	"arm near box" [label="arm near box
+Score: 0.4" color=black shape=ellipse style=solid]
+	"looking from left" -> "arm near box" [label="move arm forward"]
+	"arm near apple's suspected location" [label="arm near apple's suspected location
+Score: 0.6" color=black shape=ellipse style=solid]
+	"arm near box" -> "arm near apple's suspected location" [label="move arm upward"]
+}
