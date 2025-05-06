@@ -110,6 +110,6 @@ POSSIBLE_BELIEF = [
 ]
 
 # global parameters
-AGENTS = {}
+AGENTS = {"Pipe": None, "Leader_0": None, "Worker_0": None, "Worker_1": None, "Worker_2": None, "Worker_3": None, "Worker_4": None, "Inspector_0": None}
 
 SENSORY_CONFIG = {}

@@ -7,7 +7,8 @@ from typing import List, Dict
 from abc import ABC, abstractmethod
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
+print(current_dir)
+sys.path.append(os.path.abspath(os.path.join(current_dir, './')))
 from hippocampus import Hippocampus
 from basal_ganglia import BasalGanglia
 from utils.legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
@@ -60,6 +61,7 @@ class LeaderAgent(BaseAgent):
             return
         task_id = self._initialize_task(task_description)
         self._prepare_task_context(context)
+        print(f"Task ID: {task_id}")
         await self._allocate_subtasks()
   
     def process_feedback(self):
@@ -102,12 +104,23 @@ class LeaderAgent(BaseAgent):
     async def _allocate_subtasks(self):
         """分配子任务给合适的工作者"""
         prompt = self._construct_decision_prompt()
-        while True:
-            llm_response = query_llm(prompt)
-            resp_json = get_clean_json(llm_response)
-            if check_lead_fmt(resp_json):
-                print(resp_json)
-                break
+        max_retries = 2
+        retries = 0
+        
+        while retries < max_retries:
+            try:
+                print(f"Task prompt: {prompt}")
+                llm_response = query_llm(prompt)
+                resp_json = get_clean_json(llm_response)
+                if check_lead_fmt(resp_json):
+                    print(resp_json)
+                    break
+                retries += 1
+            except Exception as e:
+                print(f"Error in LLM query attempt {retries + 1}: {str(e)}")
+                retries += 1
+                if retries == max_retries:
+                    raise Exception("Failed to allocate subtasks after maximum retries")
         
         difficulty = decode_difficulty_from_json(resp_json)
         if difficulty == 'high':
@@ -533,6 +546,7 @@ class ActionSelectorAgent:
         
     def initialize_task(self, task_description: str, current_state: str):
         self.current_task['task'] = task_description
+        print("initialize_task Task:", task_description)
         self.current_task['current_state'] = current_state
         self.current_task['action_list'] = get_action_combinations() 
         
@@ -577,7 +591,14 @@ if __name__ == "__main__":
     pipe = PipelineAgent(STRUCTURE['prefrontal']['pipeline_ids'][0], leader.agent_id)
     AGENTS[leader.agent_id] = leader
     AGENTS[pipe.agent_id] = pipe
+    worker = WorkerAgent(STRUCTURE['prefrontal']['worker_ids'][0], leader.agent_id, STRUCTURE['prefrontal']['expertise'][STRUCTURE['prefrontal']['worker_ids'][0]])
+    AGENTS[worker.agent_id] = worker
+    inspector = InspectorAgent(STRUCTURE['prefrontal']['inspector_ids'][0], leader.agent_id)
+    AGENTS[inspector.agent_id] = inspector
+    print("Task:", task)
+
     asyncio.run(leader.assign_task(task, context))  
+    print("run Task:", task)
     
     planner = PlannerAgent()
     planner.initialize_task(task)

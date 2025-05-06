@@ -1,5 +1,6 @@
 import numpy as np
-import openai
+# import openai
+from openai import OpenAI
 import json
 import requests
 import sys
@@ -9,6 +10,8 @@ sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
 from config.api_keys import OPENAI_API_KEY, OPENAI_BASE_URL
 from config.neuro_config import ACTION_LIST
 from scipy.signal import welch
+import urllib3
+urllib3.disable_warnings()
 
 def workers_info_list2str(workers):
     return "\n".join(
@@ -43,7 +46,7 @@ def get_clean_json(llm_response):
 def query_llm(prompt, model="gpt-4o"):
     """大语言模型调用"""
     api_key = OPENAI_API_KEY
-    url = OPENAI_BASE_URL + "chat/completions"
+    url = OPENAI_BASE_URL #+ "chat/completions"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -56,8 +59,17 @@ def query_llm(prompt, model="gpt-4o"):
         ],
     }
 
-    response = requests.post(url, headers=headers, json=data)
-    response.raise_for_status()
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+    response = client.chat.completions.create(
+    model="deepseek-chat",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant"},
+        {"role": "user", "content": "Hello"},
+    ],
+    stream=False )
+    # print(response.choices[0].message.content)
+    response = requests.post(url, headers=headers, json=data, verify=False)
+    # response.raise_for_status()
     return response.json()
 
 def filter_subtasks_by_workers(json_data, allowed_pool):

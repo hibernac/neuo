@@ -1,7 +1,7 @@
 import numpy as np
 import json
 import argparse
-import graphviz
+# import graphviz
 import matplotlib.pyplot as plt
 import networkx as nx
 from typing import Callable

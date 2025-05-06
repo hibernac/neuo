@@ -1,5 +1,12 @@
-import torch
 import sys
+try:
+    import torch
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"CUDA device: {torch.cuda.get_device_name(0)}")
+except ImportError:
+    print("Error importing torch. Please ensure torch is installed correctly in your singularity sandbox.")
 from transformers import AutoProcessor, AutoModel
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))

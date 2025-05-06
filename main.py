@@ -31,7 +31,7 @@ class EmbodiedAgentSystem:
         
         # 记忆整合
         context = self.info_hub.integrated_retrieval(self.task, processed)
-        
+        print(f"Context: {context}") # for testing
         # 决策生成
         plan = await self.controller.execute_decision_cycle(self.task, context)
         print(f"Task Metrics: {plan}") # for testing
