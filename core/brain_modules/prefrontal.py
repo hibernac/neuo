@@ -9,6 +9,8 @@ import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 print(current_dir)
 sys.path.append(os.path.abspath(os.path.join(current_dir, './')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, './../')))
+
 from hippocampus import Hippocampus
 from basal_ganglia import BasalGanglia
 from utils.legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
@@ -48,6 +50,8 @@ class LeaderAgent(BaseAgent):
         self.idle = True                    # 当前主任务空闲状态
         self.task_counter = 0               # 任务ID计数
         self.feed_back = []                 # 任务审计结果
+        # self.leader_id = agent_id              # 领导者ID
+        self.pipeline_id = STRUCTURE['prefrontal']['pipeline_ids'][0]  # 管道ID
         
     async def assign_task(self, task_description: str, context):
         """初始化并执行任务分配流程
@@ -104,7 +108,7 @@ class LeaderAgent(BaseAgent):
     async def _allocate_subtasks(self):
         """分配子任务给合适的工作者"""
         prompt = self._construct_decision_prompt()
-        max_retries = 2
+        max_retries = 1
         retries = 0
         
         while retries < max_retries:
@@ -128,7 +132,7 @@ class LeaderAgent(BaseAgent):
                 resp_json, self.worker_pool
             )
             await self._broadcast_tasks()
-        await self.send_message('Pipeline_0', {
+        await self.send_message(self.pipeline_id, {
             'type': 'task_difficulty',
             'level': difficulty
         })   
@@ -410,12 +414,15 @@ class InspectorAgent(BaseAgent):
     async def task_review(self) -> dict:
         """审查任务响应是否合理"""
         prompt = self._construct_decision_prompt()
-        while True:
+        max_retries = 3
+        for attempt in range(max_retries):
             llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_insp_review_fmt(resp_json):
                 print(resp_json)
                 break
+            if attempt == max_retries - 1:
+                raise Exception("Failed to get valid inspector review response after maximum retries")
             
         await self.send_message(self.leader_id, {
             'type': 'review_response',
@@ -588,9 +595,9 @@ if __name__ == "__main__":
     task = "Find and fetch the apple"
     
     leader = LeaderAgent(STRUCTURE['prefrontal']['leader_ids'][0], STRUCTURE['prefrontal']['worker_ids'], None)
-    pipe = PipelineAgent(STRUCTURE['prefrontal']['pipeline_ids'][0], leader.agent_id)
+    # pipe = PipelineAgent(STRUCTURE['prefrontal']['pipeline_ids'][0], STRUCTURE[['prefrontal']['pipeline_ids'], leader.agent_id])
     AGENTS[leader.agent_id] = leader
-    AGENTS[pipe.agent_id] = pipe
+    # AGENTS[pipe.agent_id] = pipe
     worker = WorkerAgent(STRUCTURE['prefrontal']['worker_ids'][0], leader.agent_id, STRUCTURE['prefrontal']['expertise'][STRUCTURE['prefrontal']['worker_ids'][0]])
     AGENTS[worker.agent_id] = worker
     inspector = InspectorAgent(STRUCTURE['prefrontal']['inspector_ids'][0], leader.agent_id)
