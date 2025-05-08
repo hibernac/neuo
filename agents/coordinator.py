@@ -1,6 +1,7 @@
 import sys
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/config')
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
 import time
 from collections import deque
 import asyncio
@@ -8,8 +9,8 @@ from queue import PriorityQueue
 from tqdm import tqdm
 from dataclasses import dataclass
 from enum import Enum
-from neuro_config import STRUCTURE, AGENTS
-from prefrontal import LeaderAgent, WorkerAgent, InspectorAgent
+from config.neuro_config import STRUCTURE, AGENTS
+from core.brain_modules.prefrontal import LeaderAgent, WorkerAgent, InspectorAgent
 
 @dataclass
 class TaskMetrics:

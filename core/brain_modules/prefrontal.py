@@ -5,14 +5,15 @@ import heapq
 import numpy as np
 from typing import List, Dict
 from abc import ABC, abstractmethod
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/utils')
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
 from hippocampus import Hippocampus
 from basal_ganglia import BasalGanglia
-from legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
-from neuro_utils import get_action_combinations, workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm, decode_difficulty_from_json
-from neuro_config import STRUCTURE, ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF, AGENTS
-from prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT, PLANNER_PLAN_PROMPT, ACTION_SELECTOR_PROMPT
+from utils.legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
+from utils.neuro_utils import get_action_combinations, workers_info_list2str, knowledge_info_list2str, filter_subtasks_by_workers, get_clean_json, query_llm, decode_difficulty_from_json
+from config.neuro_config import STRUCTURE, ACTION_LIST, SURFACE_LIST, OBJECT_LIST, POSSIBLE_BELIEF, AGENTS
+from config.prompt_config import LEADER_PROMPT, WORKER_REFL_PROMPT, WORKER_COLL_PROMPT, WORKER_TASK_PROMPT, INSPECTOR_REVIEW_PROMPT, PLANNER_PLAN_PROMPT, ACTION_SELECTOR_PROMPT
 
 class BaseAgent(ABC):
     """智能体基类，定义通用消息处理机制"""

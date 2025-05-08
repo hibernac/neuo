@@ -1,5 +1,7 @@
 import sys
-sys.path.append(r'/Users/hongjunwu/Desktop/Pj/neocortex/core/brain_modules')
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
 import numpy as np
 from typing import Dict, List, Any
 from core.brain_modules.hippocampus import Hippocampus
