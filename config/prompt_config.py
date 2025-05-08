@@ -11,8 +11,11 @@ Mission: "{str_mission}"
 Instructions:  
 1. **Think**: 
    - Assess the difficulty of the task, and label it with 'low' (e.g. walk to the desk), 'medium' (e.g. fetch an apple on the desk), or 'high' (e.g. make a chicken sandwich in the kitchen).  
+    - Low: Leader-Planner-<action>  
+    - Medium: Leader-Inspector-Planner-<action>  
+    - High: Leader-Worker-Inspector-Planner-<action>  
    - Analyze the mission's key components and map them to worker expertise.  
-2. **Plan**: Split the mission into subtasks. Each subtask must include:  
+2. **Plan**: If difficulty is high, split the mission into subtasks. Each subtask must include:  
    - "subtask_id": Unique identifier  
    - "assigned_worker": Worker_X (strictly from the database)  
    - "task_description": Clear objective  
@@ -21,7 +24,7 @@ Instructions:
 
 Example:  
 {{  
-  "difficulty": "medium",  
+  "difficulty": "high",  
   "subtasks": [  
     {{  
       "subtask_id": "ST1",  
@@ -327,7 +330,6 @@ Instructions:
    - Analyze current state and task objectives  
    - Evaluate available actions for feasibility and safety  
    - Select the single best action for current context  
-   - Add a moving distance to certain actions  
    - Reason should be concise  
 2. **Output Format**:  
    Return JSON with structure:  
