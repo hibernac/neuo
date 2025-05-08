@@ -73,11 +73,12 @@ class LeaderAgent(BaseAgent):
         if self.current_task['pending_workers']:
             print(f"Workers have not completed their tasks: {self.current_task['pending_workers']}")
             return
+        
         print(f"Task: {self.current_task['description']}")
         print(f" └─>Response: {self.inbox}")
         print(f"    └─>Feedback: {self.feed_back}")
+        
         self._reset_task_state()
-        # TODO: implement a more comprehensive prefrontal mechanism
         
     async def _check_availability(self) -> bool:
         """检查leader当前是否可以接收新任务"""
@@ -315,7 +316,6 @@ class WorkerAgent(BaseAgent):
             llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_work_refl_fmt(resp_json):
-                # print(resp_json)
                 break
 
         if not resp_json['collaboration_required']:
@@ -354,7 +354,6 @@ class WorkerAgent(BaseAgent):
             llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_work_task_fmt(resp_json):
-                # print(resp_json)
                 break
 
         await self.send_message(self.leader_id, {
@@ -592,18 +591,27 @@ if __name__ == "__main__":
         'cabinet': np.array([np.nan, np.nan, np.nan]),
         'apple': np.array([np.nan, np.nan, np.nan])
     }
-    task = "Find and fetch the apple"
+    task = "find and fetch the apple"
     
-    leader = LeaderAgent(STRUCTURE['prefrontal']['leader_ids'][0], STRUCTURE['prefrontal']['worker_ids'], None)
-    # pipe = PipelineAgent(STRUCTURE['prefrontal']['pipeline_ids'][0], STRUCTURE[['prefrontal']['pipeline_ids'], leader.agent_id])
-    AGENTS[leader.agent_id] = leader
-    # AGENTS[pipe.agent_id] = pipe
-    worker = WorkerAgent(STRUCTURE['prefrontal']['worker_ids'][0], leader.agent_id, STRUCTURE['prefrontal']['expertise'][STRUCTURE['prefrontal']['worker_ids'][0]])
-    AGENTS[worker.agent_id] = worker
-    inspector = InspectorAgent(STRUCTURE['prefrontal']['inspector_ids'][0], leader.agent_id)
-    AGENTS[inspector.agent_id] = inspector
-    print("Task:", task)
+    leader_id = STRUCTURE['prefrontal']['leader_ids'][0]
+    worker_ids = STRUCTURE['prefrontal']['worker_ids']
+    expertise_dict = STRUCTURE['prefrontal']['expertise']
+    pipe_id = STRUCTURE['prefrontal']['pipeline_ids'][0]
+    inspector_id = STRUCTURE['prefrontal']['inspector_ids'][0]
+    
+    leader = LeaderAgent(agent_id=leader_id, workers=worker_ids, inspector_id=inspector_id)
+    workers = [
+        WorkerAgent(agent_id=wid, leader_id=leader_id, expertise=expertise_dict[wid]['detail'])
+        for wid in worker_ids
+    ]
+    pipe = PipelineAgent(agent_id=pipe_id, leader_id=leader_id)
+    inspector = InspectorAgent(agent_id=inspector_id, leader_id=leader_id)
 
+    AGENTS[leader_id] = leader
+    AGENTS[worker_ids] = workers
+    AGENTS[pipe_id] = pipe
+    AGENTS[inspector_id] = inspector
+    
     asyncio.run(leader.assign_task(task, context))  
     print("run Task:", task)
     

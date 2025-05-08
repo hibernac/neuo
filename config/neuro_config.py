@@ -25,8 +25,8 @@ STRUCTURE = {
                 "detail": "check_status of _task_name, verify_completion of _subtask, detect_error in _process, report_progress of _task, retry_operation _times"
             },
             "Worker_4": {
-                "title": "Motion Planning Agent (Trajectory Optimization & Kinematics Control)",
-                "detail": "move_joint _joint_name to _deg, set_velocity _joint_name to _deg/s, follow_trajectory _path_name, maintain_pose for _seconds"
+                "title": "Segmantic Understanding Agent (Task Description Understanding)",
+                "detail": "search for object detail"
             }
         },
         "inspector_number": 1,
