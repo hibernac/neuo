@@ -10,7 +10,7 @@ from tqdm import tqdm
 from dataclasses import dataclass
 from enum import Enum
 from config.neuro_config import STRUCTURE, AGENTS
-from core.brain_modules.prefrontal import LeaderAgent, WorkerAgent, InspectorAgent
+from core.brain_modules.prefrontal import LeaderAgent, WorkerAgent, InspectorAgent, PipelineAgent
 
 @dataclass
 class TaskMetrics:
@@ -39,6 +39,13 @@ class PrefrontalOrchestrator:
         self.inspector = InspectorAgent("Inspector_0", "Leader_0")
         AGENTS[self.leader.agent_id] = self.leader
         AGENTS.update(self.workers)
+        # Register the pipelines agent
+        self.pipelines = PipelineAgent(
+            STRUCTURE['prefrontal']['pipeline_ids'][0],
+            STRUCTURE['prefrontal']['leader_ids'],
+        )
+        AGENTS[self.pipelines.agent_id] = self.pipelines
+        # Register the inspector agent
         AGENTS[self.inspector.agent_id] = self.inspector
         
         self.current_task_status = TaskStatus.PENDING
@@ -61,7 +68,7 @@ class PrefrontalOrchestrator:
                 pbar.refresh()
                 await self._execute_collaboration_phase(pbar)
                 await self._execute_work_phase(pbar)
-                await self._execute_review_phase(pbar)
+                # await self._execute_review_phase(pbar)
                 self._process_results(pbar)
             self.current_task_status = TaskStatus.COMPLETED
             self.metrics.execution_time = time.time() - self.metrics.execution_time

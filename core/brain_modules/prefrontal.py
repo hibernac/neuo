@@ -7,7 +7,10 @@ from typing import List, Dict
 from abc import ABC, abstractmethod
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.abspath(os.path.join(current_dir, '../../')))
+print(current_dir)
+sys.path.append(os.path.abspath(os.path.join(current_dir, './')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, './../')))
+
 from hippocampus import Hippocampus
 from basal_ganglia import BasalGanglia
 from utils.legal_checks import check_lead_fmt, check_work_coll_fmt, check_work_refl_fmt, check_work_task_fmt, check_insp_review_fmt, check_plan_tree_fmt, check_action_fmt
@@ -47,6 +50,8 @@ class LeaderAgent(BaseAgent):
         self.idle = True                    # 当前主任务空闲状态
         self.task_counter = 0               # 任务ID计数
         self.feed_back = []                 # 任务审计结果
+        # self.leader_id = agent_id              # 领导者ID
+        self.pipeline_id = STRUCTURE['prefrontal']['pipeline_ids'][0]  # 管道ID
         
     async def assign_task(self, task_description: str, context):
         """初始化并执行任务分配流程
@@ -60,6 +65,7 @@ class LeaderAgent(BaseAgent):
             return
         task_id = self._initialize_task(task_description)
         self._prepare_task_context(context)
+        print(f"Task ID: {task_id}")
         await self._allocate_subtasks()
   
     def process_feedback(self):
@@ -103,12 +109,23 @@ class LeaderAgent(BaseAgent):
     async def _allocate_subtasks(self):
         """分配子任务给合适的工作者"""
         prompt = self._construct_decision_prompt()
-        while True:
-            llm_response = query_llm(prompt)
-            resp_json = get_clean_json(llm_response)
-            if check_lead_fmt(resp_json):
-                print(resp_json)
-                break
+        max_retries = 1
+        retries = 0
+        
+        while retries < max_retries:
+            try:
+                print(f"Task prompt: {prompt}")
+                llm_response = query_llm(prompt)
+                resp_json = get_clean_json(llm_response)
+                if check_lead_fmt(resp_json):
+                    print(resp_json)
+                    break
+                retries += 1
+            except Exception as e:
+                print(f"Error in LLM query attempt {retries + 1}: {str(e)}")
+                retries += 1
+                if retries == max_retries:
+                    raise Exception("Failed to allocate subtasks after maximum retries")
         
         difficulty = decode_difficulty_from_json(resp_json)
         if difficulty == 'high':
@@ -116,7 +133,7 @@ class LeaderAgent(BaseAgent):
                 resp_json, self.worker_pool
             )
             await self._broadcast_tasks()
-        await self.send_message('Pipeline_0', {
+        await self.send_message(self.pipeline_id, {
             'type': 'task_difficulty',
             'level': difficulty
         })   
@@ -396,12 +413,15 @@ class InspectorAgent(BaseAgent):
     async def task_review(self) -> dict:
         """审查任务响应是否合理"""
         prompt = self._construct_decision_prompt()
-        while True:
+        max_retries = 3
+        for attempt in range(max_retries):
             llm_response = query_llm(prompt)
             resp_json = get_clean_json(llm_response)
             if check_insp_review_fmt(resp_json):
                 print(resp_json)
                 break
+            if attempt == max_retries - 1:
+                raise Exception("Failed to get valid inspector review response after maximum retries")
             
         await self.send_message(self.leader_id, {
             'type': 'review_response',
@@ -532,6 +552,7 @@ class ActionSelectorAgent:
         
     def initialize_task(self, task_description: str, current_state: str):
         self.current_task['task'] = task_description
+        print("initialize_task Task:", task_description)
         self.current_task['current_state'] = current_state
         self.current_task['action_list'] = get_action_combinations() 
         
@@ -592,6 +613,7 @@ if __name__ == "__main__":
     AGENTS[inspector_id] = inspector
     
     asyncio.run(leader.assign_task(task, context))  
+    print("run Task:", task)
     
     planner = PlannerAgent()
     planner.initialize_task(task)
