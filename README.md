@@ -1,33 +1,33 @@
 ## Structure  
 
 ```python
-项目目录结构：
+Project directory structure:
 brain_embodied_agent/
 ├── core/
 │   ├── brain_modules/
-│   │   ├── sensory.py         # 多模态感知处理
-│   │   ├── prefrontal.py      # 分层决策控制
-│   │   ├── hippocampus.py     # 记忆整合系统
-│   │   └── basal_ganglia.py   # 行为选择机制
+│   │   ├── sensory.py         # Multi-modal perception processing
+│   │   ├── prefrontal.py      # Hierarchical decision control
+│   │   ├── hippocampus.py     # Memory integration system
+│   │   └── basal_ganglia.py   # Behavior selection mechanism
 ├── agents/
-│   ├── coordinator.py         # 中央协调系统
-│   ├── actuator.py            # 运动执行模块
-│   └── thalamus.py            # 信息路由中心
+│   ├── coordinator.py         # Central coordination system
+│   ├── actuator.py            # Motion execution module
+│   └── thalamus.py            # Information routing center
 ├── memory/
-│   ├── knowledge_graph.py     # 语义记忆存储
-│   ├── episodic_memory.py     # 情景记忆管理
-│   └── working_memory.py      # 工作记忆缓存
+│   ├── knowledge_graph.py     # Semantic memory storage
+│   ├── episodic_memory.py     # Episodic memory management
+│   └── working_memory.py      # Working memory cache
 ├── utils/
-│   ├── legal_checks.py        # 合法性检验工具
-│   ├── neuro_utils.py         # 神经计算工具
-│   └── sim_env.py             # 环境交互接口
+│   ├── legal_checks.py        # Legality check tools
+│   ├── neuro_utils.py         # Neural computation tools
+│   └── sim_env.py             # Environment interaction interface
 ├── evaluation/
-│   ├── neural_benchmark.py    # 神经合理性评估
-│   └── collab_metrics.py      # 协作效能指标
-└── config/                    # 系统配置
-    ├── api_keys.py            # 第三方服务密钥
-    ├── neuro_config.py        # 脑区参数配置
-    └── prompt_config.py       # 提示词配置
+│   ├── neural_benchmark.py    # Neural rationality evaluation
+│   └── collab_metrics.py      # Collaboration effectiveness metrics
+└── config/                    # System configuration
+    ├── api_keys.py            # Third-party service keys
+    ├── neuro_config.py        # Brain region parameter configuration
+    └── prompt_config.py       # Prompt configuration
 ```
 
 ### Requirements
@@ -40,15 +40,16 @@ scipy==1.15.2
 
 ### How to run
 
-1. 在`neuro_congig.py`的 `STRUCTURE`中设置多智能体架构、动作集
-2. 全局定义`task`字段，`context`全局object信息
-3. 初始化`leaderAgent`,`pipelineAgent`,`workerAgent`,`InspectorAgent`,`plannerAgent`
-4. 通过`planner.basal.ingest_observation(observation)`插入观测值
-5. 通过
+1.  Set the multi-agent architecture and action set in `STRUCTURE` of `neuro_config.py`.
+2.  Globally define the `task` field and `context` global object information.
+3.  Initialize `leaderAgent`, `pipelineAgent`, `workerAgent`, `InspectorAgent`, and `plannerAgent`.
+4.  Insert observation values through `planner.basal.ingest_observation(observation)`.
+5.  Select actions through:
+
 ```python
 selector = ActionSelectorAgent()
 selector.initialize_task(task, planner.basal.current_state)
 selector.ingest_partial_obsv(observation)
 ```
-选择动作
-6. `planner.get_optm_action()`获取当前预测的下一步动作
+
+6.  Get the currently predicted next action through `planner.get_optm_action()`.
